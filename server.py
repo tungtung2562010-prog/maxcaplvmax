@@ -4413,4 +4413,4 @@ if __name__=="__main__":
 else:
     init_db()
     init_account_db()
-    start_background_predictor()
+    start_background_predictor() 
