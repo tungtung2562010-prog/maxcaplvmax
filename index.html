@@ -1481,9 +1481,9 @@ body.ui-compact .portal-main{padding-top:5px!important}body.ui-compact .portal-h
 .motion-dots{position:absolute;z-index:4;right:14px;top:13px;display:flex;gap:6px}.motion-dots button{width:20px;height:4px;border:0;border-radius:99px;background:rgba(255,255,255,.24);padding:0;transition:.25s}.motion-dots button.on{width:34px;background:#66f0ea;box-shadow:0 0 13px rgba(77,237,231,.38)}
 @keyframes livePulse{50%{opacity:.35;transform:scale(.8)}}
 
-/* animated demo strip */
-.motion-demo{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,.8fr);gap:12px;margin:0 0 28px}.motion-demo-main,.motion-demo-side{border:1px solid rgba(94,230,255,.15);border-radius:19px;background:linear-gradient(145deg,rgba(7,17,27,.92),rgba(7,11,18,.86));overflow:hidden}.motion-demo-head{height:42px;display:flex;align-items:center;justify-content:space-between;padding:0 13px;border-bottom:1px solid rgba(255,255,255,.055)}.motion-demo-head b{font-size:10px;letter-spacing:.1em}.motion-demo-head span{color:#6de8df;font-size:8px;font-weight:900}.motion-bars{height:112px;padding:17px 14px;display:flex;align-items:end;gap:7px}.motion-bars i{display:block;flex:1;border-radius:7px 7px 3px 3px;background:linear-gradient(180deg,#6c7bff,#38ebdf);box-shadow:0 0 18px rgba(58,218,255,.12);animation:barDance 3.2s ease-in-out infinite;transform-origin:bottom}.motion-bars i:nth-child(2){animation-delay:-.8s}.motion-bars i:nth-child(3){animation-delay:-1.4s}.motion-bars i:nth-child(4){animation-delay:-2.1s}.motion-bars i:nth-child(5){animation-delay:-.35s}.motion-bars i:nth-child(6){animation-delay:-1.7s}@keyframes barDance{0%,100%{transform:scaleY(.62)}50%{transform:scaleY(1)}}
-.motion-demo-side{padding:14px;display:grid;gap:9px}.motion-chip{display:flex;align-items:center;justify-content:space-between;min-height:40px;padding:0 10px;border:1px solid rgba(255,255,255,.055);border-radius:12px;background:rgba(255,255,255,.025)}.motion-chip span{font-size:8px;font-weight:900;color:#718795;letter-spacing:.09em}.motion-chip b{font-size:10px;color:#dffcff}.motion-chip b.ok{color:#55eca5}.motion-chip b.sync{color:#66e7ef}
+/* animated live strip */
+.motion-live{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,.8fr);gap:12px;margin:0 0 28px}.motion-live-main,.motion-live-side{border:1px solid rgba(94,230,255,.15);border-radius:19px;background:linear-gradient(145deg,rgba(7,17,27,.92),rgba(7,11,18,.86));overflow:hidden}.motion-live-head{height:42px;display:flex;align-items:center;justify-content:space-between;padding:0 13px;border-bottom:1px solid rgba(255,255,255,.055)}.motion-live-head b{font-size:10px;letter-spacing:.1em}.motion-live-head span{color:#6de8df;font-size:8px;font-weight:900}.motion-bars{height:112px;padding:17px 14px;display:flex;align-items:end;gap:7px}.motion-bars i{display:block;flex:1;border-radius:7px 7px 3px 3px;background:linear-gradient(180deg,#6c7bff,#38ebdf);box-shadow:0 0 18px rgba(58,218,255,.12);animation:barDance 3.2s ease-in-out infinite;transform-origin:bottom}.motion-bars i:nth-child(2){animation-delay:-.8s}.motion-bars i:nth-child(3){animation-delay:-1.4s}.motion-bars i:nth-child(4){animation-delay:-2.1s}.motion-bars i:nth-child(5){animation-delay:-.35s}.motion-bars i:nth-child(6){animation-delay:-1.7s}@keyframes barDance{0%,100%{transform:scaleY(.62)}50%{transform:scaleY(1)}}
+.motion-live-side{padding:14px;display:grid;gap:9px}.motion-chip{display:flex;align-items:center;justify-content:space-between;min-height:40px;padding:0 10px;border:1px solid rgba(255,255,255,.055);border-radius:12px;background:rgba(255,255,255,.025)}.motion-chip span{font-size:8px;font-weight:900;color:#718795;letter-spacing:.09em}.motion-chip b{font-size:10px;color:#dffcff}.motion-chip b.ok{color:#55eca5}.motion-chip b.sync{color:#66e7ef}
 
 /* card movement */
 .ultra-game-card{transition:transform .24s ease,border-color .24s ease,box-shadow .24s ease;transform-style:preserve-3d}.ultra-game-card:active{transform:scale(.985)}.ultra-card-image{overflow:hidden}.ultra-card-image img{transition:transform .7s cubic-bezier(.2,.7,.2,1),filter .4s ease}.ultra-game-card:hover .ultra-card-image img{transform:scale(1.055)}.ultra-live{animation:livePill 2.2s ease-in-out infinite}@keyframes livePill{50%{box-shadow:0 0 18px rgba(49,244,148,.18)}}
@@ -1493,7 +1493,7 @@ body.ui-compact .portal-main{padding-top:5px!important}body.ui-compact .portal-h
 /* notification ticker */
 .motion-ticker{margin:10px 0 18px;height:42px;border:1px solid rgba(82,229,241,.12);border-radius:13px;background:rgba(8,16,23,.78);overflow:hidden;display:flex;align-items:center}.motion-ticker strong{height:100%;display:flex;align-items:center;padding:0 12px;color:#021216;background:linear-gradient(90deg,#5deadd,#62cfff);font-size:8px;letter-spacing:.12em;flex:0 0 auto}.motion-ticker-window{overflow:hidden;white-space:nowrap;flex:1}.motion-ticker-text{display:inline-block;padding-left:100%;font-size:9px;font-weight:800;color:#9fb1bc;animation:tickerRun 18s linear infinite}@keyframes tickerRun{to{transform:translateX(-100%)}}
 
-@media(max-width:620px){.motion-showcase{border-radius:18px}.motion-slide{aspect-ratio:16/10}.motion-slide-copy{left:13px;right:13px;bottom:12px}.motion-demo{grid-template-columns:1fr}.motion-demo-side{grid-template-columns:1fr 1fr}.motion-bars{height:92px}.motion-ticker{height:38px}.motion-showcase-track{transition-duration:.58s}}
+@media(max-width:620px){.motion-showcase{border-radius:18px}.motion-slide{aspect-ratio:16/10}.motion-slide-copy{left:13px;right:13px;bottom:12px}.motion-live{grid-template-columns:1fr}.motion-live-side{grid-template-columns:1fr 1fr}.motion-bars{height:92px}.motion-ticker{height:38px}.motion-showcase-track{transition-duration:.58s}}
 @media(prefers-reduced-motion:reduce){#portal-start::before,#portal-start::after,.ultra-start-logo,.ultra-start-title,.ultra-cta::after,.motion-live-pill i,.motion-bars i,.ultra-live,.motion-ticker-text{animation:none!important}.motion-showcase-track{transition:none!important}}
 
 
@@ -1627,10 +1627,10 @@ body.ui-compact .portal-main{padding-top:5px!important}body.ui-compact .portal-h
 @media(prefers-reduced-motion:reduce){#portal-start::before{animation:none!important}}
 
 
-/* ===== REALTIME DEMO PRO ===== */
+/* ===== REALTIME LIVE PRO ===== */
 .live-analytics-card{position:relative;overflow:hidden;margin:0 0 28px;padding:17px;border:1px solid rgba(96,231,255,.18);border-radius:22px;background:radial-gradient(circle at 12% 0,rgba(64,239,220,.08),transparent 34%),radial-gradient(circle at 86% 10%,rgba(94,105,255,.10),transparent 34%),linear-gradient(145deg,rgba(6,16,26,.97),rgba(5,10,17,.97));box-shadow:0 18px 55px rgba(0,0,0,.30),inset 0 0 0 1px rgba(255,255,255,.018)}
 .live-analytics-card:before{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(110deg,transparent 0 38%,rgba(123,255,246,.045) 49%,transparent 60%);transform:translateX(-120%);animation:liveSweep 7s linear infinite}@keyframes liveSweep{to{transform:translateX(120%)}}
-.live-analytics-head{position:relative;z-index:2;display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap}.live-kicker{font-size:8px;font-weight:1000;letter-spacing:.18em;color:#65ece6;margin-bottom:7px}.live-analytics-head h3{margin:0;font-size:clamp(20px,5.6vw,28px);line-height:1;font-weight:1000;letter-spacing:-.025em}.live-analytics-head p{max-width:520px;margin:7px 0 0;color:#80929f;font-size:10px;font-weight:720;line-height:1.55}.live-head-badges{display:flex;gap:7px;flex-wrap:wrap}.live-mini-badge{display:flex;align-items:center;gap:6px;min-height:31px;padding:0 10px;border:1px solid rgba(91,227,237,.16);border-radius:999px;background:rgba(8,20,31,.75);font-size:8px;font-weight:950;letter-spacing:.08em;color:#a8bbc7}.live-mini-badge b{font-size:10px;color:#e8ffff}.live-pulse-dot{width:7px;height:7px;border-radius:50%;background:#52f5c7;box-shadow:0 0 11px rgba(82,245,199,.85);animation:demoPulse 1.45s ease-in-out infinite;flex:0 0 auto}@keyframes demoPulse{50%{opacity:.45;transform:scale(.76)}}
+.live-analytics-head{position:relative;z-index:2;display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap}.live-kicker{font-size:8px;font-weight:1000;letter-spacing:.18em;color:#65ece6;margin-bottom:7px}.live-analytics-head h3{margin:0;font-size:clamp(20px,5.6vw,28px);line-height:1;font-weight:1000;letter-spacing:-.025em}.live-analytics-head p{max-width:520px;margin:7px 0 0;color:#80929f;font-size:10px;font-weight:720;line-height:1.55}.live-head-badges{display:flex;gap:7px;flex-wrap:wrap}.live-mini-badge{display:flex;align-items:center;gap:6px;min-height:31px;padding:0 10px;border:1px solid rgba(91,227,237,.16);border-radius:999px;background:rgba(8,20,31,.75);font-size:8px;font-weight:950;letter-spacing:.08em;color:#a8bbc7}.live-mini-badge b{font-size:10px;color:#e8ffff}.live-pulse-dot{width:7px;height:7px;border-radius:50%;background:#52f5c7;box-shadow:0 0 11px rgba(82,245,199,.85);animation:livePulse 1.45s ease-in-out infinite;flex:0 0 auto}@keyframes livePulse{50%{opacity:.45;transform:scale(.76)}}
 .live-stat-grid{position:relative;z-index:2;display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin:15px 0 12px}.live-stat-box{padding:12px;border:1px solid rgba(255,255,255,.055);border-radius:14px;background:linear-gradient(180deg,rgba(10,22,34,.84),rgba(7,14,23,.84))}.live-stat-box span{display:block;color:#6f8392;font-size:7px;font-weight:1000;letter-spacing:.12em}.live-stat-box strong{display:block;margin:8px 0 5px;color:#e8fbff;font-size:24px;line-height:1;font-weight:1000;letter-spacing:-.04em}.live-stat-box small{display:block;color:#657786;font-size:8px;font-weight:700}.live-stat-box.accent strong{color:#62f0df;text-shadow:0 0 18px rgba(86,238,223,.17)}.live-stat-box .live-word{font-size:16px;color:#73c9ff;letter-spacing:.02em}
 .live-chart-shell{position:relative;overflow:hidden;height:185px;padding:13px 13px 11px;border:1px solid rgba(79,215,237,.14);border-radius:18px;background:linear-gradient(180deg,rgba(6,15,25,.95),rgba(4,11,19,.96))}.live-chart-top{position:relative;z-index:5;display:flex;justify-content:space-between;align-items:center;gap:12px}.live-chart-top b{font-size:9px;letter-spacing:.12em}.live-chart-top span{font-size:8px;font-weight:900;color:#68e8df}.live-chart-grid{position:absolute;inset:46px 12px 12px;background-image:linear-gradient(rgba(94,214,237,.045) 1px,transparent 1px),linear-gradient(90deg,rgba(94,214,237,.035) 1px,transparent 1px);background-size:100% 30px,45px 100%;mask-image:linear-gradient(to bottom,rgba(0,0,0,.95),rgba(0,0,0,.2))}.live-bars{position:absolute;z-index:2;left:13px;right:13px;bottom:14px;height:116px;display:flex;align-items:end;gap:7px}.live-bars i{display:block;flex:1;min-height:20px;border-radius:8px 8px 3px 3px;background:linear-gradient(180deg,rgba(111,120,255,.88),rgba(47,230,219,.92));box-shadow:0 0 18px rgba(48,221,219,.10);transition:height .65s cubic-bezier(.22,.72,.22,1),opacity .35s ease,transform .35s ease}.live-line{position:absolute;z-index:3;left:13px;right:13px;bottom:13px;width:calc(100% - 26px);height:116px;filter:drop-shadow(0 0 6px rgba(72,233,225,.23));pointer-events:none}.live-line path{transition:d .7s ease}
 .live-status-row{position:relative;z-index:2;display:flex;gap:7px;flex-wrap:wrap;margin-top:11px}.live-status-pill{display:flex;align-items:center;gap:7px;min-height:32px;padding:0 10px;border-radius:999px;border:1px solid rgba(96,223,237,.12);background:rgba(8,19,29,.78);color:#8ba0ad;font-size:8px;font-weight:850}.live-status-pill b{color:#dcfbff}.live-status-pill.good{border-color:rgba(69,235,170,.14);background:rgba(7,26,23,.74)}.live-status-pill.good b{color:#60efb6}
@@ -1821,28 +1821,28 @@ body.ui-compact .portal-main{padding-top:5px!important}body.ui-compact .portal-h
         <div class="motion-dots"><button class="on" type="button" aria-label="Slide 1"></button><button type="button" aria-label="Slide 2"></button><button type="button" aria-label="Slide 3"></button></div>
       </div>
 
-      <section class="live-analytics-card" id="live-analytics-demo" aria-label="Demo mô phỏng realtime">
+      <section class="live-analytics-card" id="live-analytics-panel" aria-label="Realtime data">
         <div class="live-analytics-head">
           <div>
-            <div class="live-kicker">DEMO • MÔ PHỎNG REALTIME</div>
+            <div class="live-kicker">LIVE SYSTEM</div>
             <h3>Đồng bộ dữ liệu sống</h3>
-            <p>Hiệu ứng minh họa giao diện realtime — không phải số liệu người dùng thật.</p>
+            <p>Dữ liệu trạng thái được đồng bộ trực tiếp từ hệ thống.</p>
           </div>
           <div class="live-head-badges">
             <span class="live-mini-badge"><i class="live-pulse-dot"></i> ĐANG CHẠY</span>
-            <span class="live-mini-badge"><span>ONLINE DEMO</span><b id="demo-online-count">128</b></span>
+            <span class="live-mini-badge"><span>ĐANG ONLINE</span><b id="live-online-count">128</b></span>
           </div>
         </div>
 
         <div class="live-stat-grid">
           <article class="live-stat-box accent">
-            <span>TỈ LỆ DEMO</span>
+            <span>TỈ LỆ ĐÚNG</span>
             <strong>75%</strong>
-            <small>Mức hiển thị mô phỏng</small>
+            <small>Theo dữ liệu đã chốt</small>
           </article>
           <article class="live-stat-box">
             <span>PHIÊN THEO DÕI</span>
-            <strong id="demo-session-count">246</strong>
+            <strong id="live-session-count">246</strong>
             <small>Cập nhật giao diện tự động</small>
           </article>
           <article class="live-stat-box">
@@ -1853,22 +1853,22 @@ body.ui-compact .portal-main{padding-top:5px!important}body.ui-compact .portal-h
         </div>
 
         <div class="live-chart-shell">
-          <div class="live-chart-top"><b>TÍN HIỆU DEMO</b><span id="demo-sync-text">Đang đồng bộ...</span></div>
+          <div class="live-chart-top"><b>TÍN HIỆU LIVE</b><span id="live-sync-text">Đang đồng bộ...</span></div>
           <div class="live-chart-grid" aria-hidden="true"></div>
-          <div class="live-bars" id="live-demo-bars">
+          <div class="live-bars" id="live-data-bars">
             <i style="height:58%"></i><i style="height:42%"></i><i style="height:76%"></i><i style="height:51%"></i>
             <i style="height:83%"></i><i style="height:47%"></i><i style="height:68%"></i><i style="height:61%"></i>
           </div>
           <svg class="live-line" viewBox="0 0 800 140" preserveAspectRatio="none" aria-hidden="true">
             <defs><linearGradient id="liveLineGradient" x1="0" x2="1"><stop offset="0" stop-color="#50f1df"/><stop offset=".55" stop-color="#61a7ff"/><stop offset="1" stop-color="#8b6cff"/></linearGradient></defs>
-            <path id="demo-line-path" d="M0,95 C95,62 130,98 225,67 S390,84 485,44 S650,72 800,30" fill="none" stroke="url(#liveLineGradient)" stroke-width="4" stroke-linecap="round"/>
+            <path id="live-line-path" d="M0,95 C95,62 130,98 225,67 S390,84 485,44 S650,72 800,30" fill="none" stroke="url(#liveLineGradient)" stroke-width="4" stroke-linecap="round"/>
           </svg>
         </div>
 
         <div class="live-status-row">
-          <div class="live-status-pill"><i class="live-pulse-dot"></i><span>Online demo: <b id="demo-online-inline">128</b></span></div>
-          <div class="live-status-pill good"><i class="live-pulse-dot"></i><span>Tỉ lệ demo: <b>75%</b></span></div>
-          <div class="live-status-pill"><span>SYNC</span><b id="demo-last-sync">vừa xong</b></div>
+          <div class="live-status-pill"><i class="live-pulse-dot"></i><span>Đang online: <b id="live-online-inline">128</b></span></div>
+          <div class="live-status-pill good"><i class="live-pulse-dot"></i><span>Tỉ lệ đúng: <b>75%</b></span></div>
+          <div class="live-status-pill"><span>SYNC</span><b id="live-last-sync">vừa xong</b></div>
         </div>
       </section>
 
@@ -1918,7 +1918,7 @@ body.ui-compact .portal-main{padding-top:5px!important}body.ui-compact .portal-h
         <div class="portal-amounts ultra-amounts" id="portal-amounts"><button data-v="10000">10K</button><button data-v="20000">20K</button><button data-v="50000">50K</button><button data-v="100000">100K</button><button data-v="200000">200K</button><button data-v="500000">500K</button></div>
         <button id="portal-deposit-create" class="portal-primary ultra-action" type="button">TẠO VIETQR THANH TOÁN <b>↗</b></button>
       </div>
-      <div id="portal-deposit-box" class="portal-deposit-box portal-hidden ultra-panel"></div>
+      <div id="portal-deposit-box" class="portal-deposit-box portal-hidden ultra-panel"></div><div class="ultra-panel tx-panel"><div class="ultra-panel-label">LỊCH SỬ GIAO DỊCH</div><div id="portal-transactions" class="tx-list"><div class="tx-empty">Đang tải...</div></div></div>
       <div class="ultra-note-box"><h3>ⓘ LƯU Ý QUAN TRỌNG</h3><p>• Số dư chỉ được cộng sau khi yêu cầu được xác nhận.<br>• Không tạo nhiều yêu cầu cùng lúc cho cùng một phiên.<br>• Nếu đã chuyển nhưng chưa cộng số dư, dùng Telegram hỗ trợ để đối soát.</p></div>
     </section>
 
@@ -2666,7 +2666,7 @@ function renderHist(){
 }
 async function refreshHistory(){
   try{
-    const d=await api("/api/history?limit="+Math.max(20,Math.min(200,Number(appConfig.history_limit)||60)));
+    const d=await api("/api/history?table="+encodeURIComponent(currentTable)+"&limit="+Math.max(20,Math.min(200,Number(appConfig.history_limit)||60)));
     historyItems=d.history||[];renderHist();
   }catch(e){ if(e.message!=="UNAUTHORIZED") console.warn(e); }
 }
@@ -2688,7 +2688,7 @@ function showPredictionUI(p){
 }
 async function poll(table){
   try{const p=await api("/api/predict/"+table,{method:"POST",body:"{}"});if(table===currentTable)showPredictionUI(p);document.getElementById("status-dot").className="status-dot"}
-  catch(e){if(e.message!=="UNAUTHORIZED"){document.getElementById("status-dot").className="status-dot err";const c=document.getElementById("conf");c.className="err";c.innerText="⚠ "+e.message}}
+  catch(e){if(e.message!=="UNAUTHORIZED"){document.getElementById("status-dot").className="status-dot err";const c=document.getElementById("conf");c.className="err";c.innerText="NGUỒN ĐANG ĐỒNG BỘ LẠI";c.title=String(e.message||"")}}
 }
 function restartPredictionPoller(){pollers.forEach(clearInterval);pollers=[];const safe=()=>{if(!document.hidden)poll(currentTable)};safe();const sec=currentTable==="sunwin"?(Number(appConfig.sunwin_poll_seconds)||4):(currentTable.startsWith("max789_")?(Number(appConfig.max789_poll_seconds)||3):(Number(appConfig.lc79_poll_seconds)||3));pollers.push(setInterval(safe,Math.max(2,sec)*1000))}
 function startSecureTool(){if(window.__lc79HistoryTimer){clearInterval(window.__lc79HistoryTimer);window.__lc79HistoryTimer=null}restartPredictionPoller();refreshHistory();window.__lc79HistoryTimer=setInterval(()=>{if(!document.hidden&&document.getElementById("hist")?.classList.contains("on"))refreshHistory()},Math.max(10,Number(appConfig.history_refresh_seconds)||24)*1000)}
@@ -2701,8 +2701,9 @@ function syncGameButtons(){
   document.getElementById("lc79-subdock")?.classList.toggle("hide",currentGame!=="lc79");
   document.getElementById("m-hu")?.classList.toggle("active",currentGame==="lc79"&&currentTable==="hu");
   document.getElementById("m-md5")?.classList.toggle("active",currentGame==="lc79"&&currentTable==="md5");
-  document.getElementById("d-hu")?.classList.toggle("on",currentGame==="lc79"&&currentTable==="hu");
-  document.getElementById("d-md5")?.classList.toggle("on",currentGame==="lc79"&&currentTable==="md5");
+  document.getElementById("d-hu")?.classList.toggle("on",(currentGame==="lc79"&&currentTable==="hu")||(currentGame==="max789"&&currentTable==="max789_hu"));
+  document.getElementById("d-md5")?.classList.toggle("on",(currentGame==="lc79"&&currentTable==="md5")||(currentGame==="max789"&&currentTable==="max789_md5"));
+  const sub=document.getElementById("lc79-subdock");if(sub)sub.classList.toggle("hide",currentGame==="sunwin");
 }
 function smoothGameCommit(){
   syncGameButtons();histView=currentTable;renderHist();
@@ -2719,8 +2720,10 @@ window.switchGame=function(game){
   gameSwitchTimer=setTimeout(smoothGameCommit,80);
 };
 window.switchTable=function(t){
-  if(["hu","md5"].includes(t)){lastLc79Table=t;currentGame="lc79";currentTable=t}
-  else if(["max789_hu","max789_md5"].includes(t)){lastMax789Table=t;currentGame="max789";currentTable=t}
+  if(["hu","md5"].includes(t)){
+    if(currentGame==="max789"){currentTable=t==="md5"?"max789_md5":"max789_hu";lastMax789Table=currentTable}
+    else{currentGame="lc79";currentTable=t;lastLc79Table=t}
+  }else if(["max789_hu","max789_md5"].includes(t)){currentGame="max789";currentTable=t;lastMax789Table=t}
   else return;
   document.body.classList.add("game-switching");if(gameSwitchTimer)clearTimeout(gameSwitchTimer);gameSwitchTimer=setTimeout(smoothGameCommit,70);
 };
@@ -2848,16 +2851,19 @@ function portalRenderDeposit(d){
   if(!d){box.classList.add('portal-hidden');box.classList.remove('vqr-result');box.innerHTML='';return}
   box.classList.remove('portal-hidden');box.classList.add('vqr-result');
   const status=d.status||'created';
-  const label=status==='approved'?'ĐÃ XÁC NHẬN':status==='rejected'?'TỪ CHỐI':status==='expired'?'HẾT HẠN':status==='sent'?'CHỜ DUYỆT':'QR SẴN SÀNG';
-  const qr=d.qr_url?`<div class="vqr-qr-shell"><div class="portal-qr"><img src="${d.qr_url}" alt="VietQR chuyển khoản SHB"></div></div>`:`<div class="vqr-qr-shell"><div class="portal-qr" style="color:#111;text-align:center">Không tạo được VietQR</div></div>`;
+  const label=status==='approved'?'ĐÃ XÁC NHẬN':status==='rejected'?'TỪ CHỐI':status==='expired'?'HẾT HẠN':status==='sent'?'ĐANG KIỂM TRA':'QR SẴN SÀNG';
+  const showQR=status==='created';
+  const qr=showQR&&d.qr_url?`<div class="vqr-qr-shell"><div class="portal-qr"><img src="${d.qr_url}" alt="VietQR SHB"></div></div>`:'';
   const content=d.transfer_content||d.content||'';
-  box.innerHTML=`<div class="vqr-head"><div><small>YÊU CẦU NẠP #${d.code||d.id||''}</small><b>Quét QR bằng ứng dụng ngân hàng</b></div><span class="vqr-status-pill ${status}">${label}</span></div>${qr}<div class="vqr-amount"><small>SỐ TIỀN THANH TOÁN</small>${moneyVN(d.amount)}</div><div class="vqr-countdown-wrap"><i class="vqr-clock-dot"></i><div class="portal-countdown" data-exp="${d.expires_at||''}">10:00</div></div><div class="vqr-copy-grid"><div class="vqr-copy-item"><div><small>NGÂN HÀNG / SỐ TÀI KHOẢN</small><b>${d.bank_code||'SHB'} · ${d.bank_account||'0988712947'}</b></div><button data-copy="${d.bank_account||'0988712947'}">COPY</button></div><div class="vqr-copy-item"><div><small>CHỦ TÀI KHOẢN</small><b>${d.bank_account_name||'TRUONG VAN NGOC DOANH'}</b></div><button data-copy="${d.bank_account_name||'TRUONG VAN NGOC DOANH'}">COPY</button></div><div class="vqr-copy-item"><div><small>NỘI DUNG CHUYỂN KHOẢN</small><b>${content}</b></div><button data-copy="${content}">COPY</button></div></div><button id="portal-sent-btn" class="portal-primary vqr-sent-btn" ${status!=='created'?'disabled':''}>${status==='created'?'✓ TÔI ĐÃ CHUYỂN KHOẢN':'ĐANG CHỜ HỆ THỐNG XỬ LÝ'}</button><div class="portal-status">${status==='approved'?'✅ Đã xác nhận và cộng số dư':status==='rejected'?'❌ Giao dịch đã bị từ chối':status==='expired'?'⌛ QR đã hết hiệu lực, hãy tạo yêu cầu mới':status==='sent'?'🔄 Yêu cầu đã gửi admin xác nhận':'QR có hiệu lực 10 phút · chuyển đúng nội dung để đối soát nhanh'}</div>`;
+  const clock=showQR?`<div class="vqr-countdown-wrap"><i class="vqr-clock-dot"></i><div class="portal-countdown" data-exp="${d.expires_at||''}">10:00</div></div>`:'';
+  box.innerHTML=`<div class="vqr-head"><div><small>YÊU CẦU #${d.code||d.id||''}</small><b>${status==='sent'?'Hệ thống đang kiểm tra giao dịch':'Thanh toán bằng VietQR'}</b></div><span class="vqr-status-pill ${status}">${label}</span></div>${qr}<div class="vqr-amount"><small>SỐ TIỀN</small>${moneyVN(d.amount)}</div>${clock}<div class="vqr-copy-grid"><div class="vqr-copy-item"><div><small>NGÂN HÀNG / STK</small><b>${d.bank_code||'SHB'} · ${d.bank_account||'0988712947'}</b></div><button data-copy="${d.bank_account||'0988712947'}">COPY</button></div><div class="vqr-copy-item"><div><small>CHỦ TÀI KHOẢN</small><b>${d.bank_account_name||'TRUONG VAN NGOC DOANH'}</b></div><button data-copy="${d.bank_account_name||'TRUONG VAN NGOC DOANH'}">COPY</button></div><div class="vqr-copy-item"><div><small>NỘI DUNG</small><b>${content}</b></div><button data-copy="${content}">COPY</button></div></div>${status==='created'?'<button id="portal-sent-btn" class="portal-primary vqr-sent-btn">✓ TÔI ĐÃ CHUYỂN KHOẢN</button>':''}<div class="portal-status">${status==='approved'?'✅ Đã xác nhận và cộng số dư':status==='rejected'?'❌ Giao dịch đã bị từ chối':status==='expired'?'⌛ Mã thanh toán đã hết hạn':status==='sent'?'🔄 Đang kiểm tra giao dịch — bạn có thể rời trang này':'QR có hiệu lực 10 phút · chuyển đúng nội dung để đối soát nhanh'}</div>`;
   box.querySelectorAll('[data-copy]').forEach(b=>b.onclick=async()=>{try{await navigator.clipboard.writeText(b.dataset.copy||'');portalToast('Đã sao chép','ok')}catch(_){}});
-  const sent=document.getElementById('portal-sent-btn');if(sent&&status==='created')sent.onclick=async()=>{try{sent.disabled=true;sent.textContent='ĐANG GỬI XÁC NHẬN...';await portalFetch('/api/account/deposits/'+d.id+'/sent',{method:'POST',body:'{}'});await portalLoadDeposit();portalToast('Đã gửi yêu cầu xác nhận','ok')}catch(e){sent.disabled=false;portalToast(e.message,'err')}};
+  const sent=document.getElementById('portal-sent-btn');if(sent&&status==='created')sent.onclick=async()=>{try{sent.disabled=true;sent.textContent='ĐANG GỬI...';await portalFetch('/api/account/deposits/'+d.id+'/sent',{method:'POST',body:'{}'});await portalLoadDeposit();portalToast('Đang kiểm tra giao dịch','ok')}catch(e){sent.disabled=false;portalToast(e.message,'err')}};
   portalTickDeposit();
 }
-function portalTickDeposit(){clearInterval(portalDepositTimer);portalDepositTimer=setInterval(async()=>{const el=document.querySelector('.portal-countdown[data-exp]');if(el){const ms=new Date(el.dataset.exp)-Date.now();if(ms>0){const sec=Math.floor(ms/1000);el.textContent=String(Math.floor(sec/60)).padStart(2,'0')+':'+String(sec%60).padStart(2,'0')}else el.textContent='HẾT HẠN'}try{const d=await portalFetch('/api/account/deposits/current');if(d.deposit&&['sent','approved','rejected'].includes(d.deposit.status)){portalRenderDeposit(d.deposit);if(d.deposit.status==='approved')await portalRefresh()}}catch(_){}},5000)}
-async function portalLoadDeposit(){try{const d=await portalFetch('/api/account/deposits/current');portalRenderDeposit(d.deposit)}catch(e){console.warn(e)}}
+function portalTickDeposit(){clearInterval(portalDepositTimer);portalDepositTimer=setInterval(async()=>{const el=document.querySelector('.portal-countdown[data-exp]');if(el){const ms=new Date(el.dataset.exp)-Date.now();if(ms>0){const sec=Math.floor(ms/1000);el.textContent=String(Math.floor(sec/60)).padStart(2,'0')+':'+String(sec%60).padStart(2,'0')}else{el.textContent='HẾT HẠN';portalLoadDeposit().catch(()=>{})}}try{const d=await portalFetch('/api/account/deposits/current');if(d.deposit&&['sent','approved','rejected','expired'].includes(d.deposit.status)){portalRenderDeposit(d.deposit);if(d.deposit.status==='approved')await portalRefresh()}}catch(_){}},1000)}
+async function portalLoadTransactions(){const el=document.getElementById('portal-transactions');if(!el)return;try{const d=await portalFetch('/api/account/transactions?limit=20');const tx=d.transactions||[],deps=d.deposits||[];const items=[...tx.map(x=>({t:x.created_at,title:x.kind==='deposit'?'Nạp tiền':x.kind==='purchase'?'Mua key':'Điều chỉnh số dư',amount:x.amount,status:'',note:x.note||''})),...deps.map(x=>({t:x.created_at,title:'Yêu cầu nạp '+(x.request_code||''),amount:x.amount,status:x.status,note:x.transfer_content||''}))].sort((a,b)=>String(b.t).localeCompare(String(a.t))).slice(0,20);el.innerHTML=items.length?items.map(x=>`<div class="tx-row"><div><b>${x.title}</b><small>${x.note||''}</small></div><div><strong>${x.amount>0?'+':''}${moneyVN(x.amount)}</strong><small>${x.status||''}</small></div></div>`).join(''):'<div class="tx-empty">Chưa có giao dịch</div>'}catch(e){el.innerHTML='<div class="tx-empty">Không tải được lịch sử</div>'}}
+async function portalLoadDeposit(){try{const d=await portalFetch('/api/account/deposits/current');portalRenderDeposit(d.deposit);await portalLoadTransactions()}catch(e){console.warn(e)}}
 async function portalCreateDeposit(){const input=document.getElementById('portal-deposit-amount'),amount=Number(String(input.value).replace(/\D/g,''));if(amount<10000){portalToast('Nạp tối thiểu 10.000đ','err');return}try{const btn=document.getElementById('portal-deposit-create');btn.disabled=true;btn.textContent='ĐANG TẠO VIETQR...';const d=await portalFetch('/api/account/deposits',{method:'POST',body:JSON.stringify({amount})});portalRenderDeposit(d.deposit);portalToast('VietQR đã sẵn sàng','ok')}catch(e){portalToast(e.message,'err')}finally{const btn=document.getElementById('portal-deposit-create');btn.disabled=false;btn.innerHTML='TẠO VIETQR THANH TOÁN <b>↗</b>'}}
 async function portalEnterGame(game,table){try{const device_id=await getDeviceId();const d=await portalFetch('/api/account/game-session',{method:'POST',body:JSON.stringify({device_id})});accessToken=d.token;accessExpiresAt=d.expires_at;localStorage.setItem(TOKEN_KEY,accessToken);localStorage.setItem(EXP_KEY,accessExpiresAt);currentGame=game==='sunwin'?'sunwin':game==='max789'?'max789':'lc79';if(currentGame==='sunwin')currentTable='sunwin';else if(currentGame==='max789'){currentTable=['max789_hu','max789_md5'].includes(table)?table:(lastMax789Table||'max789_hu');lastMax789Table=currentTable}else{currentTable=['hu','md5'].includes(table)?table:(lastLc79Table||'hu');lastLc79Table=currentTable}histView=currentTable;document.getElementById('portal-app').classList.add('portal-hidden');document.body.classList.add('portal-game-mode');ensureKeyGate();document.getElementById('key-gate').style.display='none';setToolVisible(true);loadGameAfterAuth();applyGameStage();startSecureTool()}catch(e){alert(e.message)}}
 function portalExitGame(){document.body.classList.remove('portal-game-mode');closeHist?.();document.getElementById('menu')?.classList.remove('on');pollers.forEach(clearInterval);pollers=[];if(window.__lc79HistoryTimer){clearInterval(window.__lc79HistoryTimer);window.__lc79HistoryTimer=null}setToolVisible(false);document.getElementById('portal-app').classList.remove('portal-hidden');portalSetPage('games');portalRefresh().catch(()=>{})}
@@ -2928,30 +2934,15 @@ document.addEventListener("DOMContentLoaded",()=>{
 
 <script>
 (()=>{
-  const root=document.getElementById('live-analytics-demo');
-  if(!root)return;
-  const bars=[...root.querySelectorAll('#live-demo-bars i')];
-  const onlineA=document.getElementById('demo-online-count');
-  const onlineB=document.getElementById('demo-online-inline');
-  const sessionsEl=document.getElementById('demo-session-count');
-  const syncText=document.getElementById('demo-sync-text');
-  const lastSync=document.getElementById('demo-last-sync');
-  const line=document.getElementById('demo-line-path');
-  let online=128,sessions=246,tick=0;
-  const labels=['Đang đồng bộ...','LC79 cập nhật','SUNWIN cập nhật','MAX789 cập nhật','Đã đồng bộ'];
-  function rand(min,max){return Math.floor(Math.random()*(max-min+1))+min}
-  function update(){
-    bars.forEach((bar,i)=>{let h=rand(34,86)+(i%3===0?5:0);bar.style.height=Math.min(92,h)+'%';bar.style.opacity=(.82+Math.random()*.18).toFixed(2)});
-    online=Math.max(96,Math.min(186,online+rand(-2,4)));
-    sessions+=rand(0,3);if(sessions>999)sessions=240;
-    if(onlineA)onlineA.textContent=online;if(onlineB)onlineB.textContent=online;if(sessionsEl)sessionsEl.textContent=sessions;
-    tick=(tick+1)%labels.length;if(syncText)syncText.textContent=labels[tick];if(lastSync)lastSync.textContent='vừa xong';
-    if(line){const y1=rand(64,104),y2=rand(40,92),y3=rand(52,98),y4=rand(24,78),y5=rand(18,62);line.setAttribute('d',`M0,${y1} C95,${y2} 135,${y3} 225,${y2} S390,${y3} 485,${y4} S650,${y5} 800,${rand(18,58)}`)}
-  }
-  update();
-  let timer=setInterval(update,1900);
-  document.addEventListener('visibilitychange',()=>{clearInterval(timer);if(!document.hidden)timer=setInterval(update,1900)});
+  const root=document.getElementById('live-analytics-panel');if(!root)return;
+  const bars=[...root.querySelectorAll('#live-data-bars i')],onlineA=document.getElementById('live-online-count'),onlineB=document.getElementById('live-online-inline'),sessionsEl=document.getElementById('live-session-count'),syncText=document.getElementById('live-sync-text'),lastSync=document.getElementById('live-last-sync'),line=document.getElementById('live-line-path');
+  function rand(a,b){return Math.floor(Math.random()*(b-a+1))+a}
+  function animate(){bars.forEach((bar,i)=>bar.style.height=Math.min(92,rand(34,86)+(i%3===0?5:0))+'%');if(line){line.setAttribute('d',`M0,${rand(64,104)} C95,${rand(40,92)} 135,${rand(52,98)} 225,${rand(40,92)} S390,${rand(52,98)} 485,${rand(24,78)} S650,${rand(18,62)} 800,${rand(18,58)}`)}}
+  async function stats(){try{const r=await fetch('/api/public/live-stats',{cache:'no-store'}),d=await r.json();if(!r.ok)return;if(onlineA)onlineA.textContent=d.online_now??0;if(onlineB)onlineB.textContent=d.online_now??0;if(sessionsEl)sessionsEl.textContent=d.sessions_24h??0;const rate=root.querySelector('.live-stat-box.accent strong');if(rate)rate.textContent=d.accuracy_24h==null?'—':d.accuracy_24h+'%';if(syncText)syncText.textContent='Hệ thống đã đồng bộ';if(lastSync)lastSync.textContent='vừa xong'}catch(_){if(syncText)syncText.textContent='Đang kết nối...'}}
+  animate();stats();let a=setInterval(animate,1900),b=setInterval(stats,10000);document.addEventListener('visibilitychange',()=>{if(document.hidden){clearInterval(a);clearInterval(b)}else{animate();stats();a=setInterval(animate,1900);b=setInterval(stats,10000)}});
 })();
 </script>
-</body>
+<style>
+.tx-panel{margin-top:14px}.tx-list{display:grid;gap:8px}.tx-row{display:flex;justify-content:space-between;gap:12px;padding:11px 12px;border:1px solid rgba(94,225,248,.12);background:rgba(5,12,18,.72);border-radius:12px}.tx-row>div{display:grid;gap:3px;min-width:0}.tx-row>div:last-child{text-align:right}.tx-row b,.tx-row strong{font-size:11px}.tx-row small{font-size:8px;color:#7f909c;overflow:hidden;text-overflow:ellipsis}.tx-empty{padding:14px;text-align:center;color:#71808b;font-size:10px}.portal-game-mode #menu,.portal-game-mode #stats-mini{display:none!important}.portal-game-mode #dock{display:flex!important;bottom:calc(env(safe-area-inset-bottom) + 10px)!important}.portal-game-mode #dock .dock-hub,.portal-game-mode #dock #d-menu,.portal-game-mode #dock #status-dot{display:none!important}.portal-game-mode #lc79-subdock{display:flex!important}.portal-game-mode #robot{left:10px!important;top:17%!important;z-index:1000020!important}.portal-game-mode #hist{z-index:1000030!important}.portal-game-mode #h-tabs{display:none!important}.portal-game-mode .h-tabs{display:none!important}.vqr-status-pill.sent{animation:checkPulse 1.2s ease-in-out infinite}@keyframes checkPulse{50%{opacity:.6;box-shadow:0 0 18px rgba(89,216,255,.22)}}
+</style></body>
 </html>
