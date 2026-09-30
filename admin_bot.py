@@ -231,6 +231,7 @@ async def post_init(app):
     app.create_task(live_worker(app),name="taixiutool-live-auto")
     app.create_task(account_live_worker(app),name="taixiutool-account-live")
     app.create_task(daily_report_worker(app),name="taixiutool-daily-report")
+    app.create_task(report48_worker(app),name="taixiutool-48h-report")
 
 async def auto_delete_admin_command(update:Update,ctx:ContextTypes.DEFAULT_TYPE):
     if not allowed(update) or not update.message:return
@@ -730,7 +731,7 @@ async def account_live_worker(app):
                 if ev=='deposit_sent':
                     did=detail.get('deposit_id');amount=detail.get('amount',0)
                     kb=InlineKeyboardMarkup([[InlineKeyboardButton("✅ DUYỆT",callback_data=f"depok:{did}"),InlineKeyboardButton("❌ TỪ CHỐI",callback_data=f"depno:{did}")]])
-                    await app.bot.send_message(ADMIN_ID,f"💳 NẠP TIỀN CHỜ DUYỆT\n👤 {user}\n💰 {fmt_money(amount)}\n🆔 #{did}",reply_markup=kb)
+                    await app.bot.send_message(ADMIN_ID,f"💳 GIAO DỊCH ĐANG KIỂM TRA\n👤 User: {user}\n💰 Số tiền: {fmt_money(amount)}\n🧾 Nội dung: {detail.get('content','-')}\n🔖 Mã: {detail.get('request_code','-')}\n🆔 #{did}",reply_markup=kb)
                 elif ev=='account_registered':
                     await app.bot.send_message(ADMIN_ID,f"👤 TÀI KHOẢN MỚI\n{user} · IP {detail.get('ip','-')}")
                 elif ev=='key_purchased':
@@ -822,6 +823,138 @@ async def edit_key(update:Update,ctx:ContextTypes.DEFAULT_TYPE):
     d=req("PATCH",f"/api/admin/keys/{kid}",json={"days":days,"price_vnd":price,"max_devices":devices})
     await update.message.reply_text(f"✅ Đã sửa key ID {kid}\n⏳ {days} ngày từ bây giờ\n💰 {fmt_money(price)}\n📱 {devices} thiết bị\n⌛ {fmt_time(d['expires_at'])}")
 
+def _find_account_by_username(username):
+    username=(username or '').strip().lower()
+    accs=req('GET','/api/admin/accounts').get('accounts',[])
+    return next((x for x in accs if str(x.get('username','')).lower()==username),None)
+
+async def user_detail_cmd(update:Update,ctx:ContextTypes.DEFAULT_TYPE):
+    if not allowed(update):return
+    if not ctx.args:
+        await update.message.reply_text('Dùng: /user USERNAME');return
+    a=_find_account_by_username(ctx.args[0])
+    if not a:
+        await update.message.reply_text('❌ Không tìm thấy tài khoản.');return
+    d=req('GET',f"/api/admin/accounts/{a['id']}")
+    x=d.get('account') or {};devices=d.get('devices') or [];tx=d.get('transactions') or [];deps=d.get('deposits') or []
+    lines=[f"👤 TÀI KHOẢN @{x.get('username','-')}",
+           f"ID: {x.get('id','-')}",f"Email: {x.get('email') or '-'}",
+           f"Số dư: {fmt_money(x.get('balance_vnd',0))}",
+           f"Trạng thái: {'🟢 hoạt động' if x.get('enabled') else '🔴 đã khóa'}",
+           f"Tạo: {fmt_time(x.get('created_at'))}",f"Login cuối: {fmt_time(x.get('last_login_at'))}",
+           f"IP đăng ký: {x.get('signup_ip') or '-'}",f"IP cuối: {x.get('last_login_ip') or '-'}",
+           f"Thiết bị: {len(devices)} · Giao dịch ví: {len(tx)} · Yêu cầu nạp: {len(deps)}",'',
+           '🔒 Mật khẩu được hash một chiều, không thể xem lại.',
+           'Đặt lại: /resetpass USERNAME MATKHAUMOI',
+           'Khóa/mở: /enableuser USERNAME on|off',
+           'Xóa: /deluser USERNAME CONFIRM']
+    await update.message.reply_text('\n'.join(lines)[:3900])
+
+async def transactions_cmd(update:Update,ctx:ContextTypes.DEFAULT_TYPE):
+    if not allowed(update):return
+    if not ctx.args:
+        await update.message.reply_text('Dùng: /transactions USERNAME');return
+    a=_find_account_by_username(ctx.args[0])
+    if not a:
+        await update.message.reply_text('❌ Không tìm thấy tài khoản.');return
+    d=req('GET',f"/api/admin/accounts/{a['id']}")
+    rows=[f"💳 LỊCH SỬ @{a['username']}\n"]
+    for x in (d.get('transactions') or [])[:20]:
+        rows.append(f"{fmt_time(x.get('created_at'))} · {x.get('kind','')} · {fmt_money(x.get('amount',0))} · Số dư {fmt_money(x.get('balance_after',0))}")
+    if len(rows)==1: rows.append('Chưa có giao dịch ví.')
+    rows.append('\nYÊU CẦU NẠP')
+    for x in (d.get('deposits') or [])[:12]:
+        rows.append(f"#{x.get('id')} · {fmt_money(x.get('amount',0))} · {x.get('status')} · {x.get('transfer_content','')}")
+    await update.message.reply_text('\n'.join(rows)[:3900])
+
+async def resetpass_cmd(update:Update,ctx:ContextTypes.DEFAULT_TYPE):
+    if not allowed(update):return
+    if len(ctx.args)<2:
+        await update.message.reply_text('Dùng: /resetpass USERNAME MATKHAUMOI');return
+    a=_find_account_by_username(ctx.args[0])
+    if not a:
+        await update.message.reply_text('❌ Không tìm thấy tài khoản.');return
+    pw=' '.join(ctx.args[1:])
+    req('POST',f"/api/admin/accounts/{a['id']}/reset-password",json={'password':pw})
+    await update.message.reply_text(f"✅ Đã đặt mật khẩu mới cho @{a['username']}.\nKhông hiển thị lại mật khẩu trong bot.")
+
+async def enableuser_cmd(update:Update,ctx:ContextTypes.DEFAULT_TYPE):
+    if not allowed(update):return
+    if len(ctx.args)<2 or ctx.args[1].lower() not in ('on','off'):
+        await update.message.reply_text('Dùng: /enableuser USERNAME on|off');return
+    a=_find_account_by_username(ctx.args[0])
+    if not a:
+        await update.message.reply_text('❌ Không tìm thấy tài khoản.');return
+    enabled=ctx.args[1].lower()=='on'
+    req('PATCH',f"/api/admin/accounts/{a['id']}/status",json={'enabled':enabled})
+    await update.message.reply_text(f"✅ @{a['username']} → {'MỞ' if enabled else 'KHÓA'}")
+
+async def deluser_cmd(update:Update,ctx:ContextTypes.DEFAULT_TYPE):
+    if not allowed(update):return
+    if len(ctx.args)<2 or ctx.args[1].upper()!='CONFIRM':
+        await update.message.reply_text('Xóa tài khoản là vĩnh viễn.\nDùng: /deluser USERNAME CONFIRM');return
+    a=_find_account_by_username(ctx.args[0])
+    if not a:
+        await update.message.reply_text('❌ Không tìm thấy tài khoản.');return
+    req('DELETE',f"/api/admin/accounts/{a['id']}")
+    await update.message.reply_text(f"🗑 Đã xóa tài khoản @{a['username']}.")
+
+def analysis_report_text_payload(d):
+    lines=[f"TAIXIUTOOL ANALYSIS REPORT {d.get('hours',48)}H",
+           f"Period UTC: {d.get('period_start','')} -> {d.get('period_end','')}",'',
+           'SOURCE STATUS']
+    for k,v in (d.get('sources') or {}).items():
+        lines.append(f"{k}: state={v.get('state')} latest={v.get('latest_session')} age={v.get('age_seconds')}s")
+    lines += ['', 'RESULT STATS']
+    for x in d.get('tables') or []:
+        lines.append(f"{x.get('table_name')}: rows={x.get('rows',0)} settled={x.get('settled',0)} win={x.get('wins',0)} loss={x.get('losses',0)} accuracy={x.get('accuracy',0)}%")
+    lines += ['', 'NEW / LEARNED PATTERNS']
+    for x in (d.get('learned_patterns') or [])[:120]:
+        tw=float(x.get('t_weight') or 0);xw=float(x.get('x_weight') or 0);side='T' if tw>xw else 'X' if xw>tw else '-'
+        lines.append(f"{x.get('table_name')} | {x.get('context_key')} | samples={x.get('samples',0)} | T={tw:.3f} X={xw:.3f} => {side} | {x.get('updated_at','')}")
+    return '\n'.join(lines)+'\n'
+
+async def send_48h_reports(app,manual=False):
+    stamp=datetime.now(TZ).strftime('%Y-%m-%d_%H%M')
+    for game in ('lc79','sunwin','max789'):
+        d=await asyncio.to_thread(req,'GET',f'/api/admin/daily-report?game={game}&hours=48')
+        raw=report_text_payload(d).replace('24H','48H').encode('utf-8')
+        bio=io.BytesIO(raw);bio.name=f'{game}_48h_{stamp}.txt'
+        sm=d.get('summary') or {}
+        await app.bot.send_document(ADMIN_ID,document=bio,caption=f"📊 {game.upper()} · 48H · {sm.get('wins',0)}/{sm.get('settled',0)} đúng · {sm.get('accuracy',0)}%")
+    d=await asyncio.to_thread(req,'GET','/api/admin/analysis-report?hours=48')
+    bio=io.BytesIO(analysis_report_text_payload(d).encode('utf-8'));bio.name=f'api_patterns_48h_{stamp}.txt'
+    await app.bot.send_document(ADMIN_ID,document=bio,caption='🧩 API STATUS + HÌNH THÁI/CẦU MỚI · 48H')
+    if not manual:
+        await asyncio.to_thread(req,'POST','/api/admin/analysis-report-state',json={'last_sent_at':datetime.now(TZ).isoformat()})
+
+async def report48_cmd(update:Update,ctx:ContextTypes.DEFAULT_TYPE):
+    if not allowed(update):return
+    m=await update.message.reply_text('⏳ Đang tạo báo cáo 48H...')
+    try:
+        await send_48h_reports(ctx.application,manual=True)
+        await m.edit_text('✅ Đã gửi 4 file báo cáo 48H.')
+    except Exception as e:
+        await m.edit_text('⚠️ '+str(e)[:350])
+
+async def report48_worker(app):
+    while True:
+        try:
+            state=await asyncio.to_thread(req,'GET','/api/admin/analysis-report-state')
+            last=state.get('last_sent_at') or ''
+            due=True
+            if last:
+                try:
+                    dt=datetime.fromisoformat(last)
+                    if dt.tzinfo is None:dt=dt.replace(tzinfo=TZ)
+                    due=(datetime.now(TZ)-dt.astimezone(TZ)).total_seconds()>=172800
+                except Exception:due=True
+            if due:await send_48h_reports(app,manual=False)
+        except Exception:
+            pass
+        await asyncio.sleep(300)
+
+
 def main():
     if not BOT_TOKEN or not ADMIN_ID:raise RuntimeError("Thiếu TELEGRAM_BOT_TOKEN hoặc TELEGRAM_ADMIN_ID")
     app=Application.builder().token(BOT_TOKEN).post_init(post_init).build()
@@ -869,6 +1002,12 @@ def main():
     app.add_handler(CommandHandler("setlimits",setlimits_cmd))
     app.add_handler(CommandHandler("setdeposit",setdeposit_cmd))
     app.add_handler(CommandHandler("allsettings",allsettings_cmd))
+    app.add_handler(CommandHandler("user",user_detail_cmd))
+    app.add_handler(CommandHandler("transactions",transactions_cmd))
+    app.add_handler(CommandHandler("resetpass",resetpass_cmd))
+    app.add_handler(CommandHandler("enableuser",enableuser_cmd))
+    app.add_handler(CommandHandler("deluser",deluser_cmd))
+    app.add_handler(CommandHandler("report48",report48_cmd))
     app.add_handler(CallbackQueryHandler(callbacks))
     app.add_handler(MessageHandler(filters.COMMAND,auto_delete_admin_command),group=1)
     app.run_polling(drop_pending_updates=True,allowed_updates=Update.ALL_TYPES)
