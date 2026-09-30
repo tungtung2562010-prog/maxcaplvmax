@@ -101,6 +101,8 @@ SETTING_DEFAULTS = {
 _SUNWIN_CACHE={"ts":0.0,"data":None}
 _UPSTREAM_CACHE={"hu":{"ts":0.0,"data":None},"md5":{"ts":0.0,"data":None},"max789_hu":{"ts":0.0,"data":None},"max789_md5":{"ts":0.0,"data":None}}
 _SOURCE_STATE={}
+_SOURCE_ERRORS={}
+_UPSTREAM_LOCKS={k:threading.Lock() for k in ("hu","md5","sunwin","max789_hu","max789_md5")}
 
 
 
@@ -387,10 +389,12 @@ def normalize_tx(item):
     return None
 
 def get_upstream(table):
-    """Fast multi-game fetch with a very short in-process cache.
+    """Resilient fetch for LC79/MAX789.
 
-    Cache only collapses duplicate requests within ~1 second. Missing/old data
-    never creates synthetic session ids.
+    One table fetch is single-flight inside the process, duplicate UI/background
+    polls collapse into the same short cache, and a recently successful real
+    payload may be reused briefly during a transient network failure. No fake
+    session ids or synthetic results are ever created here.
     """
     if table=="hu": url=UPSTREAM_HU
     elif table=="md5": url=UPSTREAM_MD5
@@ -398,29 +402,42 @@ def get_upstream(table):
     elif table=="max789_md5": url=get_setting("max789_md5_api_url",MAX789_MD5_API).strip()
     else: url=""
     if not url: raise RuntimeError(f"Chưa cấu hình API cho {table.upper()}")
-    now=time.time();slot=_UPSTREAM_CACHE.setdefault(table,{"ts":0.0,"data":None})
-    if slot.get("data") is not None and now-float(slot.get("ts") or 0)<1.1:
-        return slot["data"]
-    try:
-        r=requests.get(url,headers={
-            "Accept":"application/json",
-            "User-Agent":"TAIXIUTOOL",
-            "Cache-Control":"no-cache",
-            "Pragma":"no-cache",
-        },timeout=(2.2,3.8))
-        r.raise_for_status();data=r.json()
-        slot["ts"]=time.time();slot["data"]=data
-        return data
-    except requests.HTTPError as e:
-        code=getattr(getattr(e,'response',None),'status_code',None)
-        raise RuntimeError(f'{table.upper()} API HTTP {code or "ERR"}') from e
-    except requests.Timeout as e:
-        raise RuntimeError(f'{table.upper()} API timeout') from e
-    except requests.RequestException as e:
-        raise RuntimeError(f'{table.upper()} API không kết nối được') from e
-    except ValueError as e:
-        raise RuntimeError(f'{table.upper()} API trả JSON không hợp lệ') from e
 
+    now=time.time();slot=_UPSTREAM_CACHE.setdefault(table,{"ts":0.0,"data":None})
+    cached=slot.get("data");cached_ts=float(slot.get("ts") or 0)
+    if cached is not None and now-cached_ts < 2.4:
+        return cached
+
+    lock=_UPSTREAM_LOCKS.setdefault(table,threading.Lock())
+    with lock:
+        now=time.time();cached=slot.get("data");cached_ts=float(slot.get("ts") or 0)
+        if cached is not None and now-cached_ts < 2.4:
+            return cached
+        headers={"Accept":"application/json, text/plain, */*","User-Agent":"TAIXIUTOOL/1.0","Cache-Control":"no-cache","Pragma":"no-cache"}
+        last_err=None
+        for timeout in ((2.5,4.8),(3.5,6.5)):
+            try:
+                r=requests.get(url,headers=headers,timeout=timeout)
+                r.raise_for_status(); data=r.json()
+                slot["ts"]=time.time();slot["data"]=data
+                _SOURCE_ERRORS[table]=""
+                st=_SOURCE_STATE.setdefault(table,{"sid":None,"changed":time.time()})
+                st["last_success"]=time.time()
+                return data
+            except requests.HTTPError as e:
+                code=getattr(getattr(e,'response',None),'status_code',None);last_err=f"HTTP {code or 'ERR'}"
+            except requests.Timeout:
+                last_err="timeout"
+            except requests.RequestException:
+                last_err="không kết nối được"
+            except ValueError:
+                last_err="JSON không hợp lệ"
+        _SOURCE_ERRORS[table]=last_err or "không phản hồi"
+        # Keep the last REAL payload briefly so UI/background polls do not all
+        # collapse during a short upstream hiccup.
+        if cached is not None and time.time()-cached_ts < 30.0:
+            return cached
+        raise RuntimeError(f"{table.upper()} API {_SOURCE_ERRORS[table]}")
 
 def _strict_session_id(item):
     if not isinstance(item,dict): return None
@@ -580,36 +597,33 @@ def find_sunwin_current_session(data):
     return candidates[0][2]
 
 def get_sunwin_upstream():
-    """SUNWIN single-endpoint adapter with short cache/fallback."""
+    """SUNWIN adapter with single-flight, retry and recent-real-data fallback."""
     import time as _time
+    table="sunwin"
     api_url=get_setting("sunwin_api_url",SUNWIN_API).strip()
-    if not api_url:
-        raise RuntimeError("Chưa cấu hình SUNWIN API")
-    now=_time.time()
-    cached=_SUNWIN_CACHE.get("data")
-    cached_ts=float(_SUNWIN_CACHE.get("ts") or 0)
-    # Avoid hammering temporary Cloudflare tunnels on every poll.
-    if cached is not None and now-cached_ts < 1.2:
-        return cached,cached
-    headers={
-        "Accept":"application/json, text/plain, */*",
-        "User-Agent":"TAIXIUTOOL-SUNWIN",
-        "Cache-Control":"no-cache",
-    }
-    last_err=None
-    for timeout in (3.5,5.0):
-        try:
-            r=requests.get(api_url,headers=headers,timeout=timeout)
-            r.raise_for_status()
-            data=r.json()
-            _SUNWIN_CACHE["ts"]=_time.time();_SUNWIN_CACHE["data"]=data
-            return data,data
-        except Exception as e:
-            last_err=e
-    # Temporary network failure: allow a recent successful payload.
-    if cached is not None and now-cached_ts < 15.0:
-        return cached,cached
-    raise RuntimeError(f"SUNWIN API tạm thời không phản hồi: {last_err}")
+    if not api_url: raise RuntimeError("Chưa cấu hình SUNWIN API")
+    now=_time.time(); cached=_SUNWIN_CACHE.get("data"); cached_ts=float(_SUNWIN_CACHE.get("ts") or 0)
+    if cached is not None and now-cached_ts < 2.4:return cached,cached
+    lock=_UPSTREAM_LOCKS.setdefault(table,threading.Lock())
+    with lock:
+        now=_time.time();cached=_SUNWIN_CACHE.get("data");cached_ts=float(_SUNWIN_CACHE.get("ts") or 0)
+        if cached is not None and now-cached_ts < 2.4:return cached,cached
+        headers={"Accept":"application/json, text/plain, */*","User-Agent":"TAIXIUTOOL-SUNWIN/1.0","Cache-Control":"no-cache","Pragma":"no-cache"}
+        last_err=None
+        for timeout in (4.0,6.5):
+            try:
+                r=requests.get(api_url,headers=headers,timeout=timeout);r.raise_for_status();data=r.json()
+                _SUNWIN_CACHE["ts"]=_time.time();_SUNWIN_CACHE["data"]=data
+                _SOURCE_ERRORS[table]="";st=_SOURCE_STATE.setdefault(table,{"sid":None,"changed":_time.time()});st["last_success"]=_time.time()
+                return data,data
+            except requests.HTTPError as e:
+                code=getattr(getattr(e,'response',None),'status_code',None);last_err=f"HTTP {code or 'ERR'}"
+            except requests.Timeout:last_err="timeout"
+            except requests.RequestException:last_err="không kết nối được"
+            except ValueError:last_err="JSON không hợp lệ"
+        _SOURCE_ERRORS[table]=last_err or "không phản hồi"
+        if cached is not None and _time.time()-cached_ts < 35.0:return cached,cached
+        raise RuntimeError(f"SUNWIN API {_SOURCE_ERRORS[table]}")
 
 
 # =============================================================
@@ -3629,7 +3643,7 @@ def admin_daily_report_mark():
     return jsonify({'ok':True,'last_sent':value})
 
 @app.get("/health")
-def health(): return jsonify({"ok":True,"service":"prediction-core","background":True,"engine":"stability-max"})
+def health(): return jsonify({"ok":True,"service":"prediction-core","background":True,"engine":"htungvip-max-stable"})
 
 def client_ip():
     # Railway/Cloudflare/reverse proxy: first forwarded address is the original client.
@@ -4062,10 +4076,16 @@ def predict(table):
 @app.get("/api/source-status")
 def source_status():
     out={}
+    now=time.time()
     for table in ('hu','md5','sunwin','max789_hu','max789_md5'):
         st=_SOURCE_STATE.get(table) or {}
-        age=max(0,int(time.time()-float(st.get('changed') or time.time()))) if st.get('sid') else None
-        out[table]={'latest_sid':st.get('sid'),'age_seconds':age,'seen':bool(st.get('sid'))}
+        age=max(0,int(now-float(st.get('changed') or now))) if st.get('sid') else None
+        last_success=int(max(0,now-float(st.get('last_success')))) if st.get('last_success') else None
+        out[table]={
+          'latest_sid':st.get('sid'),'age_seconds':age,'seen':bool(st.get('sid')),
+          'last_success_ago_seconds':last_success,'error':_SOURCE_ERRORS.get(table) or '',
+          'state':'live' if st.get('sid') and (age is None or age<=SOURCE_STALE_SECONDS) else ('slow' if st.get('sid') else 'waiting')
+        }
     return jsonify({'ok':True,'stale_after':SOURCE_STALE_SECONDS,'hard_stale_after':SOURCE_HARD_STALE_SECONDS,'sources':out})
 
 @app.get("/api/history")
