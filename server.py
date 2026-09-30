@@ -50,6 +50,7 @@ SETTING_DEFAULTS = {
     "max789_poll_seconds":"3",
     "history_refresh_seconds":"24",
     "history_limit":"60",
+    "history_ttl_hours":"24",
     "lc79_algo_mode":"2",
     "sunwin_algo_mode":"2",
     "max789_algo_mode":"3",
@@ -3171,7 +3172,7 @@ def mark_deposit_sent(deposit_id):
         if r['status'] not in ('created','sent'):return jsonify({'detail':'Yêu cầu này đã được xử lý'}),409
         if datetime.fromisoformat(r['expires_at'])<=now:return jsonify({'detail':'Mã nạp đã hết hiệu lực'}),410
         con.execute("UPDATE deposits SET status='sent',user_sent_at=? WHERE id=?",(now.isoformat(),deposit_id))
-    _account_event('deposit_sent',uid,deposit_id=deposit_id,amount=r['amount'],username=request.account['username'])
+    _account_event('deposit_sent',uid,deposit_id=deposit_id,amount=r['amount'],username=request.account['username'],content=r['transfer_content'],request_code=r['request_code'])
     return jsonify({'ok':True,'status':'sent','message':'Đã gửi yêu cầu xác nhận. Số dư sẽ cập nhật sau khi giao dịch được duyệt.'})
 
 @app.post('/api/account/buy-key')
@@ -3215,9 +3216,100 @@ def account_plans():
 @require_admin
 def admin_accounts():
     with db() as con:
-        rows=con.execute('''SELECT a.id,a.username,a.balance_vnd,a.created_at,a.last_login_at,a.last_login_ip,a.enabled,
+        rows=con.execute('''SELECT a.id,a.username,a.email,a.balance_vnd,a.created_at,a.last_login_at,a.last_login_ip,a.enabled,
           COUNT(DISTINCT ak.key_id) key_count FROM accounts a LEFT JOIN account_keys ak ON ak.account_id=a.id GROUP BY a.id ORDER BY a.id DESC LIMIT 100''').fetchall()
     return jsonify({'accounts':[dict(x) for x in rows]})
+
+@app.get('/api/account/transactions')
+@require_account
+def account_transactions():
+    uid=request.account['id']
+    try: limit=max(1,min(100,int(request.args.get('limit','40'))))
+    except Exception: limit=40
+    with db() as con:
+        tx=[dict(x) for x in con.execute("""SELECT id,kind,amount,balance_after,ref_type,ref_id,note,created_at
+          FROM wallet_transactions WHERE account_id=? ORDER BY id DESC LIMIT ?""",(uid,limit)).fetchall()]
+        deps=[dict(x) for x in con.execute("""SELECT id,request_code,amount,transfer_content,status,created_at,expires_at,user_sent_at,reviewed_at
+          FROM deposits WHERE account_id=? ORDER BY id DESC LIMIT ?""",(uid,limit)).fetchall()]
+    return jsonify({'transactions':tx,'deposits':deps})
+
+@app.get('/api/public/live-stats')
+def public_live_stats():
+    now=datetime.now(timezone.utc);start=now-timedelta(hours=24);online_cutoff=now-timedelta(minutes=10)
+    with db() as con:
+        try:
+            online=int(con.execute("SELECT COUNT(DISTINCT account_id) c FROM account_devices WHERE last_seen>=?",(online_cutoff.isoformat(),)).fetchone()['c'] or 0)
+        except Exception: online=0
+        row=con.execute("""SELECT COUNT(*) total,
+          SUM(CASE WHEN actual IN ('T','X') AND side IN ('T','X') THEN 1 ELSE 0 END) settled,
+          SUM(CASE WHEN correct=1 THEN 1 ELSE 0 END) wins
+          FROM global_history WHERE created_at>=?""",(start.isoformat(),)).fetchone()
+        total=int(row['total'] or 0);settled=int(row['settled'] or 0);wins=int(row['wins'] or 0)
+        accounts=int(con.execute("SELECT COUNT(*) c FROM accounts WHERE enabled=1").fetchone()['c'] or 0)
+    accuracy=round(wins*100/settled,1) if settled else None
+    sources={}
+    for t in ('hu','md5','sunwin','max789_hu','max789_md5'):
+        st=_SOURCE_STATE.get(t) or {}
+        age=max(0,int(time.time()-float(st.get('changed') or time.time()))) if st else None
+        sources[t]={'latest_session':st.get('sid'),'age_seconds':age,'state':'online' if age is not None and age<120 else ('waiting' if st else 'starting')}
+    return jsonify({'ok':True,'online_now':online,'accounts_active':accounts,'sessions_24h':total,
+                    'settled_24h':settled,'wins_24h':wins,'accuracy_24h':accuracy,'sources':sources,
+                    'server_time':now.isoformat()})
+
+@app.get('/api/admin/accounts/<int:account_id>')
+@require_admin
+def admin_account_detail(account_id):
+    with db() as con:
+        a=con.execute("""SELECT id,username,email,balance_vnd,created_at,signup_ip,signup_device_hash,last_login_at,last_login_ip,enabled
+                         FROM accounts WHERE id=?""",(account_id,)).fetchone()
+        if not a:return jsonify({'detail':'Không tìm thấy tài khoản'}),404
+        devices=[dict(x) for x in con.execute("""SELECT device_hash,first_seen,last_seen,ip_address,user_agent FROM account_devices
+                                                WHERE account_id=? ORDER BY last_seen DESC""",(account_id,)).fetchall()]
+        tx=[dict(x) for x in con.execute("""SELECT id,kind,amount,balance_after,ref_type,ref_id,note,created_at FROM wallet_transactions
+                                           WHERE account_id=? ORDER BY id DESC LIMIT 50""",(account_id,)).fetchall()]
+        deps=[dict(x) for x in con.execute("""SELECT id,request_code,amount,transfer_content,status,created_at,expires_at,user_sent_at,reviewed_at
+                                             FROM deposits WHERE account_id=? ORDER BY id DESC LIMIT 50""",(account_id,)).fetchall()]
+    return jsonify({'account':dict(a),'devices':devices,'transactions':tx,'deposits':deps,
+                    'password_note':'Mật khẩu được hash một chiều và không thể xem lại. Admin chỉ có thể đặt mật khẩu mới.'})
+
+@app.patch('/api/admin/accounts/<int:account_id>/status')
+@require_admin
+def admin_account_status(account_id):
+    d=request.get_json(silent=True) or {};enabled=1 if bool(d.get('enabled',True)) else 0
+    with db() as con:
+        a=con.execute('SELECT id,username FROM accounts WHERE id=?',(account_id,)).fetchone()
+        if not a:return jsonify({'detail':'Không tìm thấy tài khoản'}),404
+        con.execute('UPDATE accounts SET enabled=? WHERE id=?',(enabled,account_id))
+    _account_event('account_status_changed',account_id,username=a['username'],enabled=enabled)
+    return jsonify({'ok':True,'enabled':bool(enabled),'username':a['username']})
+
+@app.post('/api/admin/accounts/<int:account_id>/reset-password')
+@require_admin
+def admin_account_reset_password(account_id):
+    d=request.get_json(silent=True) or {};password=str(d.get('password') or '')
+    if len(password)<6 or len(password)>128:return jsonify({'detail':'Mật khẩu mới phải từ 6-128 ký tự'}),400
+    with db() as con:
+        a=con.execute('SELECT id,username FROM accounts WHERE id=?',(account_id,)).fetchone()
+        if not a:return jsonify({'detail':'Không tìm thấy tài khoản'}),404
+        ph,salt=_password_hash(password);con.execute('UPDATE accounts SET password_hash=?,password_salt=? WHERE id=?',(ph,salt,account_id))
+    _account_event('admin_password_reset',account_id,username=a['username'])
+    return jsonify({'ok':True,'username':a['username']})
+
+@app.delete('/api/admin/accounts/<int:account_id>')
+@require_admin
+def admin_delete_account(account_id):
+    with db() as con:
+        a=con.execute('SELECT id,username FROM accounts WHERE id=?',(account_id,)).fetchone()
+        if not a:return jsonify({'detail':'Không tìm thấy tài khoản'}),404
+        con.execute('UPDATE keys SET owner_account_id=NULL WHERE owner_account_id=?',(account_id,))
+        con.execute('DELETE FROM account_keys WHERE account_id=?',(account_id,))
+        con.execute('DELETE FROM account_devices WHERE account_id=?',(account_id,))
+        con.execute('DELETE FROM password_resets WHERE account_id=?',(account_id,))
+        con.execute('DELETE FROM wallet_transactions WHERE account_id=?',(account_id,))
+        con.execute('DELETE FROM deposits WHERE account_id=?',(account_id,))
+        con.execute('DELETE FROM account_events WHERE account_id=?',(account_id,))
+        con.execute('DELETE FROM accounts WHERE id=?',(account_id,))
+    return jsonify({'ok':True,'username':a['username']})
 
 @app.get('/api/admin/deposits')
 @require_admin
@@ -3365,8 +3457,6 @@ def public_config():
 
 @app.get("/")
 def root(): return send_from_directory(BASE,"index.html")
-@app.get("/assets/<path:name>")
-def assets_file(name): return send_from_directory(BASE / "assets",name)
 @app.get("/lc79-theme.mp3")
 def theme_audio(): return send_from_directory(BASE,"lc79-theme.mp3")
 
@@ -3409,6 +3499,43 @@ def admin_daily_report():
                    'accuracy':round(wins*100/len(settled),2) if settled else 0.0},
         'breakdown':breakdown,'rows':data
     })
+
+@app.get('/api/admin/analysis-report')
+@require_admin
+def admin_analysis_report():
+    try: hours=max(1,min(336,int(request.args.get('hours','48'))))
+    except Exception: hours=48
+    end=datetime.now(timezone.utc);start=end-timedelta(hours=hours)
+    with db() as con:
+        rows=[dict(x) for x in con.execute("""SELECT table_name,COUNT(*) rows,
+          SUM(CASE WHEN actual IN ('T','X') AND side IN ('T','X') THEN 1 ELSE 0 END) settled,
+          SUM(CASE WHEN correct=1 THEN 1 ELSE 0 END) wins,
+          SUM(CASE WHEN correct=0 THEN 1 ELSE 0 END) losses
+          FROM global_history WHERE created_at>=? GROUP BY table_name ORDER BY table_name""",(start.isoformat(),)).fetchall()]
+        pats=[dict(x) for x in con.execute("""SELECT table_name,context_key,t_weight,x_weight,samples,updated_at
+          FROM learned_patterns WHERE updated_at>=? ORDER BY samples DESC,updated_at DESC LIMIT 150""",(start.isoformat(),)).fetchall()]
+    sources={}
+    for t in ('hu','md5','sunwin','max789_hu','max789_md5'):
+        st=_SOURCE_STATE.get(t) or {};age=None
+        if st: age=max(0,int(time.time()-float(st.get('changed') or time.time())))
+        sources[t]={'latest_session':st.get('sid'),'age_seconds':age,'state':'online' if age is not None and age<120 else ('waiting' if st else 'starting')}
+    for r in rows:
+        settled=int(r.get('settled') or 0);r['accuracy']=round(int(r.get('wins') or 0)*100/settled,2) if settled else 0.0
+    return jsonify({'hours':hours,'period_start':start.isoformat(),'period_end':end.isoformat(),'tables':rows,
+                    'learned_patterns':pats,'sources':sources})
+
+@app.get('/api/admin/analysis-report-state')
+@require_admin
+def admin_analysis_report_state():
+    return jsonify({'last_sent_at':get_setting('analysis_report_last_sent_at','') or ''})
+
+@app.post('/api/admin/analysis-report-state')
+@require_admin
+def admin_analysis_report_mark():
+    d=request.get_json(silent=True) or {};value=str(d.get('last_sent_at') or '')[:80]
+    if not value:return jsonify({'detail':'Thiếu last_sent_at'}),400
+    set_setting('analysis_report_last_sent_at',value)
+    return jsonify({'ok':True,'last_sent_at':value})
 
 @app.get('/api/admin/daily-report-state')
 @require_admin
@@ -3848,23 +3975,36 @@ def predict(table):
                         'pattern':diag['pattern'],'regime':diag['regime'],'noise':diag['noise'],
                         'break_score':diag['break_score'],'clarity':diag['clarity']})
     except RuntimeError as e:
-        return jsonify({'detail':str(e)}),502
+        return jsonify({'detail':str(e),'source_status':'delayed'}),502
+    except Exception:
+        return jsonify({'detail':'Nguồn dữ liệu đang đồng bộ lại','source_status':'retrying'}),503
 
 @app.get("/api/history")
 @require_auth
 def history():
     kid=request.auth_payload["kid"]
     limit=min(200,max(1,int(request.args.get("limit",120))))
+    table=(request.args.get("table") or "").strip()
+    allowed_tables=("hu","md5","sunwin","max789_hu","max789_md5")
+    if table and table not in allowed_tables:
+        return jsonify({"detail":"Bàn không hợp lệ"}),400
+    ttl_hours=max(1,min(168,setting_int("history_ttl_hours",24,1,168)))
+    cutoff=(datetime.now(timezone.utc)-timedelta(hours=ttl_hours)).isoformat()
     with db() as con:
-        rows=con.execute("""SELECT table_name,session_id,side,confidence,reason,actual,correct,created_at
-          FROM history WHERE key_id=? ORDER BY id DESC LIMIT ?""",(kid,limit)).fetchall()
+        con.execute("DELETE FROM history WHERE created_at<?",(cutoff,))
+        if table:
+            rows=con.execute("""SELECT table_name,session_id,side,confidence,reason,actual,correct,created_at
+              FROM history WHERE key_id=? AND table_name=? ORDER BY id DESC LIMIT ?""",(kid,table,limit)).fetchall()
+        else:
+            rows=con.execute("""SELECT table_name,session_id,side,confidence,reason,actual,correct,created_at
+              FROM history WHERE key_id=? ORDER BY id DESC LIMIT ?""",(kid,limit)).fetchall()
     out=[]
     for r in rows:
         out.append({"table":r["table_name"],"sessionId":r["session_id"],"side":r["side"],
           "confidence":r["confidence"],"reason":r["reason"],"actual":r["actual"],
           "correct":None if r["correct"] is None else bool(r["correct"]),
           "time":r["created_at"][11:16] if r["created_at"] else ""})
-    return jsonify({"history":out})
+    return jsonify({"history":out,"table":table or None,"ttl_hours":ttl_hours})
 
 @app.get("/api/admin/settings")
 @require_admin
@@ -3881,7 +4021,7 @@ def admin_update_settings():
       "free_ip_daily_limit":("int",1,100),"captcha_ttl_seconds":("int",60,1800),
       "free_step_ttl_minutes":("int",2,60),"free_flow_ttl_minutes":("int",10,180),
       "lc79_poll_seconds":("int",2,60),"sunwin_poll_seconds":("int",2,60),"max789_poll_seconds":("int",2,60),
-      "history_refresh_seconds":("int",10,120),"history_limit":("int",20,200),
+      "history_refresh_seconds":("int",10,120),"history_limit":("int",20,200),"history_ttl_hours":("int",1,168),
       "lc79_algo_mode":("int",1,3),"sunwin_algo_mode":("int",1,3),"max789_algo_mode":("int",1,3),"gps_prompt":("int",0,1),
       "lc79_game_url":("url",8,300),"sunwin_game_url":("url",8,300),"sunwin_api_url":("url",8,500),
       "max789_game_url":("url",8,300),"max789_hu_api_url":("url",8,500),"max789_md5_api_url":("url",8,500),
