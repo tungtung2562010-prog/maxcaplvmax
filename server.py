@@ -35,6 +35,8 @@ SMTP_FROM_EMAIL = os.getenv("SMTP_FROM_EMAIL", SMTP_USER).strip()
 SMTP_FROM_NAME = os.getenv("SMTP_FROM_NAME", "TAIXIUTOOL").strip() or "TAIXIUTOOL"
 SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "1").strip().lower() not in ("0","false","off","no")
 RESET_CODE_TTL_MINUTES = max(5, min(30, int(os.getenv("RESET_CODE_TTL_MINUTES", "10"))))
+SOURCE_STALE_SECONDS = max(120, int(os.getenv("SOURCE_STALE_SECONDS", "300")))
+SOURCE_HARD_STALE_SECONDS = max(SOURCE_STALE_SECONDS + 60, int(os.getenv("SOURCE_HARD_STALE_SECONDS", "900")))
 
 SETTING_DEFAULTS = {
     "brand":"TAIXIUTOOL",
@@ -399,15 +401,25 @@ def get_upstream(table):
     now=time.time();slot=_UPSTREAM_CACHE.setdefault(table,{"ts":0.0,"data":None})
     if slot.get("data") is not None and now-float(slot.get("ts") or 0)<1.1:
         return slot["data"]
-    r=requests.get(url,headers={
-        "Accept":"application/json",
-        "User-Agent":"TAIXIUTOOL",
-        "Cache-Control":"no-cache",
-        "Pragma":"no-cache",
-    },timeout=(2.2,3.8))
-    r.raise_for_status();data=r.json()
-    slot["ts"]=time.time();slot["data"]=data
-    return data
+    try:
+        r=requests.get(url,headers={
+            "Accept":"application/json",
+            "User-Agent":"TAIXIUTOOL",
+            "Cache-Control":"no-cache",
+            "Pragma":"no-cache",
+        },timeout=(2.2,3.8))
+        r.raise_for_status();data=r.json()
+        slot["ts"]=time.time();slot["data"]=data
+        return data
+    except requests.HTTPError as e:
+        code=getattr(getattr(e,'response',None),'status_code',None)
+        raise RuntimeError(f'{table.upper()} API HTTP {code or "ERR"}') from e
+    except requests.Timeout as e:
+        raise RuntimeError(f'{table.upper()} API timeout') from e
+    except requests.RequestException as e:
+        raise RuntimeError(f'{table.upper()} API không kết nối được') from e
+    except ValueError as e:
+        raise RuntimeError(f'{table.upper()} API trả JSON không hợp lệ') from e
 
 
 def _strict_session_id(item):
@@ -2469,36 +2481,49 @@ def _learn_pattern_row(con,table_name,learn_keys,actual,stamp):
 
 
 def _online_pattern_signal(hist,table_name):
+    """Settled-only online learner with aggressive shrinkage against small samples.
+
+    Learned patterns are advisory.  They never get to look at the current
+    unsettled result, and sparse contexts are shrunk hard toward 50/50 so a
+    short lucky streak cannot steer the whole ensemble.
+    """
     keys=_learning_context_keys(hist)
     if not keys:return 0.0,0.0
     votes=[];now=datetime.now(timezone.utc)
     with db() as con:
         for key in keys:
             row=con.execute('SELECT * FROM learned_patterns WHERE table_name=? AND context_key=?',(table_name,key)).fetchone()
-            if not row or int(row['samples'] or 0)<5:continue
+            samples=int(row['samples'] or 0) if row else 0
+            if not row or samples<7:continue
             tw=float(row['t_weight'] or 0);xw=float(row['x_weight'] or 0)
             try:
                 prev=datetime.fromisoformat(row['updated_at'])
                 hours=max(0.0,(now-prev).total_seconds()/3600.0)
-                decay=0.5**(hours/48.0);tw*=decay;xw*=decay
+                decay=0.5**(hours/42.0);tw*=decay;xw*=decay
             except Exception:pass
             eff=tw+xw
-            if eff<4.0:continue
-            p=(tw+1.75)/(eff+3.5);edge=(p-.5)*2.0
-            if abs(edge)<.06:continue
+            if eff<5.0:continue
+            # Strong Beta shrinkage + explicit effective-sample shrinkage.
+            p=(tw+2.6)/(eff+5.2)
+            raw=(p-.5)*2.0
+            shrink=eff/(eff+9.0)
+            edge=raw*shrink
+            if abs(edge)<.055:continue
             specificity=1.0
             if key.startswith('S'):
-                try:specificity=.72+min(8,int(key[1:key.index(':')]))*.055
+                try:specificity=.68+min(8,int(key[1:key.index(':')]))*.048
                 except Exception:pass
-            elif key.startswith('R5:'):specificity=1.05
-            elif key.startswith('D:'):specificity=.72
-            w=min(1.3,math.log1p(eff)/2.6)*specificity
-            votes.append((edge,w,eff))
+            elif key.startswith('R5:'):specificity=1.00
+            elif key.startswith('D:'):specificity=.66
+            # Long contexts need more samples before they may carry full weight.
+            sample_factor=_v61_clamp((samples-4)/14.0,.20,1.0)
+            w=min(1.15,math.log1p(eff)/2.8)*specificity*sample_factor
+            votes.append((edge,w,eff,samples))
     if len(votes)<2:return 0.0,0.0
-    pos=sum(w for e,w,_ in votes if e>0);neg=sum(w for e,w,_ in votes if e<0);tot=pos+neg
-    if max(pos,neg)/max(.001,tot)<.64:return 0.0,.30
-    edge=sum(e*w for e,w,_ in votes)/max(.001,tot)
-    support=min(1.9,.30+len(votes)*.13+min(1.0,sum(v[2] for v in votes)/35.0))
+    pos=sum(w for e,w,_,_ in votes if e>0);neg=sum(w for e,w,_,_ in votes if e<0);tot=pos+neg
+    if max(pos,neg)/max(.001,tot)<.68:return 0.0,.24
+    edge=sum(e*w for e,w,_,_ in votes)/max(.001,tot)
+    support=min(1.45,.24+len(votes)*.105+min(.85,sum(v[2] for v in votes)/48.0))
     return _v61_clamp(edge,-1,1),support
 
 
@@ -2553,9 +2578,34 @@ def _core_structural_anchor(hist,candidates):
     return _v61_clamp(norm,-1.0,1.0),_v61_clamp(agreement,0.0,1.0)
 
 
+def _core_anchor_stack(hist,candidates):
+    """Consensus of several PREVIOUS structural states.
+
+    The newest result is deliberately excluded by _core_structural_anchor().
+    Calling it on progressively shorter prefixes tells us whether a direction
+    existed for more than one settled session.  This is a hysteresis guard,
+    not an extra prediction model.
+    """
+    votes=[]
+    for cut,recency in ((0,1.00),(1,.84),(2,.70),(3,.58)):
+        h=hist[:-cut] if cut else hist
+        if len(h)<22:continue
+        try:e,ag=_core_structural_anchor(h,candidates)
+        except Exception:continue
+        if abs(e)<.032:continue
+        w=recency*_v61_clamp(.58+.42*ag,.55,1.0)*_v61_clamp(.35+abs(e)*4.2,.38,1.0)
+        votes.append((e,w))
+    if not votes:return 0.0,0.0,0
+    den=sum(w for _,w in votes) or 1.0
+    norm=sum(e*w for e,w in votes)/den
+    pos=sum(w for e,w in votes if e>0);neg=sum(w for e,w in votes if e<0)
+    agreement=max(pos,neg)/max(.001,pos+neg)
+    return _v61_clamp(norm,-1.0,1.0),_v61_clamp(agreement,0.0,1.0),len(votes)
+
+
 def _core_ensemble(hist,candidates,mode=2,force=False):
     if len(hist)<16:return _core_best_effort(hist) if force else (None,48,'CHƯA ĐỦ DỮ LIỆU · BỎ QUA')
-    horizons=((24,.50),(48,.32),(96,.18));naive=_core_weighted_baselines(hist,horizons);last=hist[-1];models=[]
+    horizons=((20,.42),(40,.30),(80,.18),(140,.10));naive=_core_weighted_baselines(hist,horizons);last=hist[-1];models=[]
     for name,fn in candidates.items():
         try:edge,sup=fn(hist)
         except Exception:continue
@@ -2614,22 +2664,36 @@ def _core_ensemble(hist,candidates,mode=2,force=False):
     # consensus before the newest outcome. One result may weaken a view, but
     # should not reverse it unless the new evidence is clearly stronger or a
     # real regime change is being detected.
-    anchor,anchor_ag=_core_structural_anchor(hist,candidates)
+    anchor,anchor_ag,anchor_n=_core_anchor_stack(hist,candidates)
     pre_edge=abs(norm)
-    if anchor*norm<0 and abs(anchor)>=.055:
-        strong_new=(pre_edge>=.145 and agreement>=.64 and avg_skill>=.525)
-        confirmed_shift=(cp>=.55 and pre_edge>=.095 and agreement>=.59)
+    if anchor*norm<0 and abs(anchor)>=.050 and anchor_n>=2:
+        # One new settled result is not enough to reverse a multi-prefix view.
+        strong_new=(pre_edge>=.155 and agreement>=.66 and avg_skill>=.528)
+        confirmed_shift=(cp>=.58 and pre_edge>=.105 and agreement>=.61)
         if not (strong_new or confirmed_shift):
-            inertia=_v61_clamp(.58-(cp*.46),.22,.52)
-            # More prior-family agreement => slightly more inertia.
-            inertia*=_v61_clamp(.80+anchor_ag*.28,.82,1.08)
+            inertia=_v61_clamp(.64-(cp*.50),.24,.56)
+            inertia*=_v61_clamp(.84+anchor_ag*.30,.86,1.12)
             norm=(1.0-inertia)*norm + inertia*anchor
+
+    # A clear run/rhythm may stabilize a direction, but it is only a guard.
+    # It can damp an unsupported flip; it never overrides a strong new consensus.
+    try:rh_edge,rh_sup=_v68_rhythm(hist)
+    except Exception:rh_edge,rh_sup=0.0,0.0
+    if rh_edge*norm<0 and abs(rh_edge)>=.24 and rh_sup>=.52 and cp<.52 and agreement<.69:
+        norm=.74*norm+.26*rh_edge
     edge=abs(norm)
 
     independent=sum(1 for x in families if abs(x[0])>=.055 and x[1]>=.10)
     structural=any(x[2] in ('NHỊP','HÌNH THÁI','CHU KỲ','TRẠNG THÁI NHỊP') and abs(x[0])>=.20 and x[3]>=.53 for x in families)
     final_side='T' if norm>=0 else 'X';family_lift=sum(x[1]*x[6] for x in families)/den
-    if final_side==last and family_lift<.008 and not structural:norm*=.46;edge=abs(norm);final_side='T' if norm>=0 else 'X'
+    # Symmetric anti-shortcut penalty: neither "repeat last" nor "flip last"
+    # gets a free pass if the families fail to beat that naive baseline.
+    relation='repeat' if final_side==last else 'flip'
+    baseline=naive.get(relation,.5)
+    if family_lift<.010 and not structural:
+        dep=_v61_clamp((baseline-.50)*3.0,0.0,.24)
+        norm*=max(.38,.52-dep)
+        edge=abs(norm);final_side='T' if norm>=0 else 'X'
     if mode==1:skip_skill,skip_edge,skip_ag=.526,.050,.585
     elif mode==3:skip_skill,skip_edge,skip_ag=.500,.020,.520
     else:skip_skill,skip_edge,skip_ag=.512,.033,.550
@@ -2640,7 +2704,14 @@ def _core_ensemble(hist,candidates,mode=2,force=False):
         if not force:return None,conf,f"{diag['pattern']} · {diag['regime']} · BỎ QUA"
         side,fb_conf,fb_reason=_core_best_effort(hist);return side,min(conf,fb_conf),fb_reason
     raw=47+max(0,avg_skill-.5)*122+max(0,agreement-.5)*23+edge*16+(1-ent)*3+(1-cp)*2
-    conf=int(round(_v61_clamp(raw,50,87)));top=sorted(families,key=lambda z:abs(z[0]*z[1]),reverse=True)[:3]
+    conf=int(round(_v61_clamp(raw,50,87)))
+    # Honest calibration caps.  Few independent families, weak OOS skill, or a
+    # transition regime must not display an inflated confidence number.
+    if independent<3:conf=min(conf,74)
+    if avg_skill<.525:conf=min(conf,72)
+    if cp>.48:conf=min(conf,70)
+    if diag['noise']>=84 and not structural:conf=min(conf,68)
+    top=sorted(families,key=lambda z:abs(z[0]*z[1]),reverse=True)[:3]
     why=' + '.join(z[2] for z in top)
     return final_side,conf,f"{diag['pattern']} · {diag['regime']} · {why}"
 
@@ -2674,9 +2745,12 @@ def _prediction_payload(table):
         if not seq:raise RuntimeError('Nguồn LC79 chưa trả lịch sử có session ID thật')
         current_sid=None;side,conf,reason=predict_lc79_core(seq,table_name=table)
     actual_map=dict(seq);latest_sid=str(seq[0][0])
-    age,fresh=_source_freshness(table,latest_sid,95.0 if table!='sunwin' else 110.0)
-    if not fresh:
-        raise RuntimeError(f'Nguồn {table.upper()} đang trễ ({int(age)}s chưa có phiên mới)')
+    age,fresh=_source_freshness(table,latest_sid,float(SOURCE_STALE_SECONDS))
+    delayed = not fresh
+    # Do not kill every table just because a completed-session id pauses briefly.
+    # Only hard-stop after a much longer period; we still never fabricate session ids.
+    if age > float(SOURCE_HARD_STALE_SECONDS):
+        raise RuntimeError(f'Nguồn {table.upper()} đứng quá lâu ({int(age)}s chưa có phiên mới)')
 
     # Prefer a real current/open session exposed by the API.
     if current_sid and str(current_sid) not in actual_map:
@@ -2689,6 +2763,10 @@ def _prediction_payload(table):
         next_sid=str(head+1)
 
     diag=_v68_diagnostics(_v61_seq_values(seq,cap=360))
+    diag['source_age_seconds']=int(age)
+    diag['source_delayed']=bool(delayed)
+    if delayed:
+        reason=(reason or '') + f' · nguồn chậm {int(age)}s'
     return seq,actual_map,next_sid,side,conf,reason,diag
 
 
@@ -3551,7 +3629,7 @@ def admin_daily_report_mark():
     return jsonify({'ok':True,'last_sent':value})
 
 @app.get("/health")
-def health(): return jsonify({"ok":True,"service":"prediction-core","background":True})
+def health(): return jsonify({"ok":True,"service":"prediction-core","background":True,"engine":"stability-max"})
 
 def client_ip():
     # Railway/Cloudflare/reverse proxy: first forwarded address is the original client.
@@ -3973,11 +4051,22 @@ def predict(table):
         return jsonify({'ok':True,'table':table,'game':'sunwin' if table=='sunwin' else ('max789' if table.startswith('max789_') else 'lc79'),
                         'session_id':next_sid,'side':side,'confidence':conf,'reason':reason,
                         'pattern':diag['pattern'],'regime':diag['regime'],'noise':diag['noise'],
-                        'break_score':diag['break_score'],'clarity':diag['clarity']})
+                        'break_score':diag['break_score'],'clarity':diag['clarity'],
+                        'source_age_seconds':diag.get('source_age_seconds',0),
+                        'source_delayed':diag.get('source_delayed',False)})
     except RuntimeError as e:
         return jsonify({'detail':str(e),'source_status':'delayed'}),502
     except Exception:
         return jsonify({'detail':'Nguồn dữ liệu đang đồng bộ lại','source_status':'retrying'}),503
+
+@app.get("/api/source-status")
+def source_status():
+    out={}
+    for table in ('hu','md5','sunwin','max789_hu','max789_md5'):
+        st=_SOURCE_STATE.get(table) or {}
+        age=max(0,int(time.time()-float(st.get('changed') or time.time()))) if st.get('sid') else None
+        out[table]={'latest_sid':st.get('sid'),'age_seconds':age,'seen':bool(st.get('sid'))}
+    return jsonify({'ok':True,'stale_after':SOURCE_STALE_SECONDS,'hard_stale_after':SOURCE_HARD_STALE_SECONDS,'sources':out})
 
 @app.get("/api/history")
 @require_auth
