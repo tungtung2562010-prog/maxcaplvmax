@@ -1727,6 +1727,103 @@ body.light .portal-page h2,body.light .portal-page h3,body.light .portal-page b{
 @media(prefers-reduced-motion:reduce){.truth-card:before,.emoji-orbit i,.ultra-avatar,#portal-app:before,#portal-app:after{animation:none!important}}
 </style>
 
+
+<style id="interaction-state-hotfix">
+/* ===== INTERACTION STATE HOTFIX — iOS/Safari ===== */
+html,body{touch-action:pan-y pinch-zoom!important;-webkit-overflow-scrolling:touch!important}
+
+/* Portal must always stay above every legacy HUD/dock/iframe overlay. */
+#portal-start,#portal-auth,#portal-app{
+  z-index:3000000!important;
+  pointer-events:auto!important;
+  isolation:isolate!important;
+}
+#portal-start.portal-hidden,#portal-auth.portal-hidden,#portal-app.portal-hidden{
+  display:none!important;
+  pointer-events:none!important;
+  visibility:hidden!important;
+}
+#portal-start::before,#portal-start::after,
+.portal-layer::before,.portal-layer::after,
+.portal-start-card::before,.portal-start-card::after{
+  pointer-events:none!important;
+}
+#portal-start button,#portal-auth button,#portal-app button,
+#portal-start input,#portal-auth input,#portal-app input,
+#portal-start a,#portal-auth a,#portal-app a{
+  pointer-events:auto!important;
+  touch-action:manipulation!important;
+}
+
+/* OUTSIDE GAME MODE: legacy game UI is forbidden to appear or catch touches. */
+body:not(.portal-game-mode) #robot,
+body:not(.portal-game-mode) #dock,
+body:not(.portal-game-mode) #stats-mini,
+body:not(.portal-game-mode) #menu,
+body:not(.portal-game-mode) #hist,
+body:not(.portal-game-mode) #game-back-btn,
+body:not(.portal-game-mode) #license-chip,
+body:not(.portal-game-mode) #game-state,
+body:not(.portal-game-mode) #sunwin-stage,
+body:not(.portal-game-mode) #max789-stage{
+  display:none!important;
+  visibility:hidden!important;
+  opacity:0!important;
+  pointer-events:none!important;
+}
+body:not(.portal-game-mode) #game-frame,
+body:not(.portal-game-mode) #sunwin-frame,
+body:not(.portal-game-mode) #max789-frame{
+  visibility:hidden!important;
+  opacity:0!important;
+  pointer-events:none!important;
+}
+
+/* Portal scrolling: only the active portal owns vertical gestures. */
+#portal-start,#portal-auth{
+  height:100dvh!important;
+  min-height:100dvh!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  overscroll-behavior-y:contain!important;
+  -webkit-overflow-scrolling:touch!important;
+}
+#portal-app{
+  height:100dvh!important;
+  min-height:100dvh!important;
+  max-height:100dvh!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  overscroll-behavior-y:contain!important;
+  -webkit-overflow-scrolling:touch!important;
+  touch-action:pan-y!important;
+}
+
+/* GAME MODE: allow only compact controls. */
+body.portal-game-mode #portal-start,
+body.portal-game-mode #portal-auth,
+body.portal-game-mode #portal-app{
+  display:none!important;
+  pointer-events:none!important;
+}
+body.portal-game-mode #game-back-btn{z-index:3000100!important;pointer-events:auto!important}
+body.portal-game-mode #robot{pointer-events:none!important}
+body.portal-game-mode #robot .wrap,
+body.portal-game-mode #robot .robot-drag-handle,
+body.portal-game-mode #robot img{pointer-events:auto!important;touch-action:none!important}
+body.portal-game-mode #dock{z-index:3000050!important;pointer-events:auto!important}
+body.portal-game-mode #hist{z-index:3000060!important;pointer-events:auto!important}
+
+/* Avoid invisible full-screen elements intercepting touches. */
+[aria-hidden="true"]{pointer-events:none}
+.portal-notice-modal:not(.on){pointer-events:none!important}
+
+@media(max-width:600px){
+  #portal-start{padding:18px 14px max(24px,env(safe-area-inset-bottom))!important}
+  .ultra-start-shell{width:min(94vw,520px)!important;max-height:none!important}
+}
+</style>
+
 </head>
 <body>
 <div id="vip-loader" aria-hidden="true"><div class="vip-load-box"><div class="vip-load-core"><i></i></div><div class="vip-load-title" id="vip-load-title">ĐANG ĐỒNG BỘ</div><div class="vip-load-sub" id="vip-load-sub">Chuẩn bị dữ liệu và giao diện...</div><div class="vip-load-track"><b></b></div></div></div>
@@ -3125,80 +3222,40 @@ document.addEventListener("DOMContentLoaded",()=>{
 })();
 </script>
 
-<!-- ===== iOS / Safari SCROLL HOTFIX ===== -->
-<style>
-/* Never let the root page cancel vertical pan gestures. */
-html,body{
-  min-height:100%!important;
-  overflow-x:hidden!important;
-  overflow-y:auto!important;
-  touch-action:pan-y!important;
-  overscroll-behavior-y:auto!important;
-}
-/* Portal is the actual scroll container while the app is open. */
-.portal-layer{
-  touch-action:pan-y!important;
-  overscroll-behavior-y:contain!important;
-}
-#portal-app{
-  position:fixed!important;
-  inset:0!important;
-  width:100%!important;
-  height:100dvh!important;
-  min-height:100dvh!important;
-  max-height:100dvh!important;
-  overflow-x:hidden!important;
-  overflow-y:scroll!important;
-  touch-action:pan-y!important;
-  -webkit-overflow-scrolling:touch!important;
-  overscroll-behavior-y:contain!important;
-  scroll-behavior:smooth!important;
-}
-#portal-app .portal-main,
-#portal-app .portal-page,
-#portal-app .portal-page.on,
-#portal-app section,
-#portal-app article{
-  touch-action:pan-y!important;
-}
-#portal-app .portal-main{
-  min-height:calc(100dvh + 2px)!important;
-  overflow:visible!important;
-  padding-bottom:calc(126px + env(safe-area-inset-bottom))!important;
-}
-/* Fixed UI must not steal vertical swipes. */
-.portal-top,.portal-dock,.portal-telegram,#game-back-btn{
-  touch-action:pan-y!important;
-}
-.portal-dock button,.portal-top button,.portal-page button,.portal-page a,.portal-page input{
-  touch-action:manipulation!important;
-}
-/* Robot HUD never blocks page panning; only the robot image itself is draggable. */
-#robot{pointer-events:none!important;touch-action:pan-y!important}
-#robot .wrap img{pointer-events:auto!important;touch-action:none!important}
-/* Auth/notice panels can scroll independently on small iPhones. */
-#portal-auth,.notice-card{
-  overflow-y:auto!important;
-  -webkit-overflow-scrolling:touch!important;
-  touch-action:pan-y!important;
-}
-</style>
-<script>
-(function(){
-  function unlockScroll(){
-    document.documentElement.style.touchAction='pan-y';
-    document.body.style.touchAction='pan-y';
-    const app=document.getElementById('portal-app');
-    if(app){
-      app.style.overflowY='scroll';
-      app.style.webkitOverflowScrolling='touch';
-      app.style.touchAction='pan-y';
+<script id="interaction-state-js-hotfix">
+(()=>{
+  const legacyIds=['robot','dock','stats-mini','menu','hist','game-back-btn','license-chip','game-state','sunwin-stage','max789-stage'];
+  function forcePortalState(){
+    const inGame=document.body.classList.contains('portal-game-mode');
+    if(!inGame){
+      legacyIds.forEach(id=>{
+        const el=document.getElementById(id);
+        if(!el)return;
+        el.setAttribute('aria-hidden','true');
+      });
+    }else{
+      ['robot','dock','game-back-btn'].forEach(id=>document.getElementById(id)?.setAttribute('aria-hidden','false'));
     }
   }
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',unlockScroll,{once:true});
-  else unlockScroll();
-  window.addEventListener('pageshow',unlockScroll);
-  window.addEventListener('orientationchange',()=>setTimeout(unlockScroll,120));
+  function resetBootState(){
+    document.body.classList.remove('portal-game-mode');
+    try{ if(typeof setToolVisible==='function')setToolVisible(false); }catch(_){}
+    forcePortalState();
+  }
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded',resetBootState,{once:true});
+  }else resetBootState();
+  window.addEventListener('pageshow',()=>{
+    const start=document.getElementById('portal-start');
+    const auth=document.getElementById('portal-auth');
+    const app=document.getElementById('portal-app');
+    const portalVisible=[start,auth,app].some(x=>x&&!x.classList.contains('portal-hidden'));
+    if(portalVisible&&!document.body.classList.contains('portal-game-mode')){
+      try{setToolVisible(false)}catch(_){}
+      forcePortalState();
+    }
+  },{passive:true});
+  new MutationObserver(forcePortalState).observe(document.body,{attributes:true,attributeFilter:['class']});
 })();
 </script>
 
