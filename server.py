@@ -16,6 +16,7 @@ app = Flask(__name__, static_folder=None)
 UPSTREAM_HU = os.getenv("UPSTREAM_HU", "")
 UPSTREAM_MD5 = os.getenv("UPSTREAM_MD5", "")
 SUNWIN_API = os.getenv("SUNWIN_API", "").strip()
+SUNWIN_HISTORY_API = os.getenv("SUNWIN_HISTORY_API", "").strip()
 MAX789_HU_API = os.getenv("MAX789_HU_API", "https://person-talent-mission-opening.trycloudflare.com/api/tx").strip()
 MAX789_MD5_API = os.getenv("MAX789_MD5_API", "https://person-talent-mission-opening.trycloudflare.com/api/txmd5").strip()
 LC79_GAME_URL = os.getenv("LC79_GAME_URL", "https://play.lc79.bet/").strip() or "https://play.lc79.bet/"
@@ -58,8 +59,11 @@ SETTING_DEFAULTS = {
     "max789_algo_mode":"3",
     "gps_prompt":"1",
     "lc79_game_url":LC79_GAME_URL,
+    "lc79_hu_api_url":UPSTREAM_HU,
+    "lc79_md5_api_url":UPSTREAM_MD5,
     "sunwin_game_url":SUNWIN_GAME_URL,
     "sunwin_api_url":SUNWIN_API,
+    "sunwin_history_api_url":SUNWIN_HISTORY_API,
     "max789_game_url":MAX789_GAME_URL,
     "max789_hu_api_url":MAX789_HU_API,
     "max789_md5_api_url":MAX789_MD5_API,
@@ -98,7 +102,10 @@ SETTING_DEFAULTS = {
 }
 
 # Short in-process cache for temporary Cloudflare/API hiccups.
-_SUNWIN_CACHE={"ts":0.0,"data":None}
+_SUNWIN_CACHE={
+    "current":{"ts":0.0,"data":None},
+    "history":{"ts":0.0,"data":None},
+}
 _UPSTREAM_CACHE={"hu":{"ts":0.0,"data":None},"md5":{"ts":0.0,"data":None},"max789_hu":{"ts":0.0,"data":None},"max789_md5":{"ts":0.0,"data":None}}
 _SOURCE_STATE={}
 _SOURCE_ERRORS={}
@@ -396,8 +403,8 @@ def get_upstream(table):
     payload may be reused briefly during a transient network failure. No fake
     session ids or synthetic results are ever created here.
     """
-    if table=="hu": url=UPSTREAM_HU
-    elif table=="md5": url=UPSTREAM_MD5
+    if table=="hu": url=get_setting("lc79_hu_api_url",UPSTREAM_HU).strip()
+    elif table=="md5": url=get_setting("lc79_md5_api_url",UPSTREAM_MD5).strip()
     elif table=="max789_hu": url=get_setting("max789_hu_api_url",MAX789_HU_API).strip()
     elif table=="max789_md5": url=get_setting("max789_md5_api_url",MAX789_MD5_API).strip()
     else: url=""
@@ -415,10 +422,12 @@ def get_upstream(table):
             return cached
         headers={"Accept":"application/json, text/plain, */*","User-Agent":"TAIXIUTOOL/1.0","Cache-Control":"no-cache","Pragma":"no-cache"}
         last_err=None
-        for timeout in ((2.5,4.8),(3.5,6.5)):
+        for timeout in ((2.4,4.2),(3.0,5.5)):
             try:
                 r=requests.get(url,headers=headers,timeout=timeout)
-                r.raise_for_status(); data=r.json()
+                r.raise_for_status()
+                try:data=r.json()
+                except ValueError:data=json.loads(r.text.lstrip('\ufeff').strip())
                 slot["ts"]=time.time();slot["data"]=data
                 _SOURCE_ERRORS[table]=""
                 st=_SOURCE_STATE.setdefault(table,{"sid":None,"changed":time.time()})
@@ -442,7 +451,7 @@ def get_upstream(table):
 def _strict_session_id(item):
     if not isinstance(item,dict): return None
     low={str(k).lower():v for k,v in item.items()}
-    for k in ("phien","phiên","sessionid","session_id","session","sid","referenceid","reference_id","id"):
+    for k in ("phien","phiên","sessionid","session_id","session","sid","roundid","round_id","round","referenceid","reference_id","id"):
         v=low.get(k)
         if v is None or isinstance(v,(dict,list)): continue
         out=str(v).strip()
@@ -470,6 +479,10 @@ def _sort_and_dedupe_sessions(rows):
 
 
 def extract_history(data):
+    """LC79 adapter. Prefer the documented list/data array, then fall back to
+    the recursive adapter so small upstream wrapper changes do not break the UI.
+    Real session ids are still mandatory; no index-based/fake sessions are made.
+    """
     arr=data.get("list") if isinstance(data,dict) else None
     if not isinstance(arr,list) and isinstance(data,dict):arr=data.get("data")
     if not isinstance(arr,list):arr=[]
@@ -477,9 +490,13 @@ def extract_history(data):
     for x in arr:
         tx=normalize_tx(x)
         sid=_strict_session_id(x)
-        # Missing session id = unusable history item. Do NOT create index-based fake sessions.
         if tx and sid is not None:out.append((sid,tx))
-    return _sort_and_dedupe_sessions(out)
+    rows=_sort_and_dedupe_sessions(out)
+    if len(rows)>=3:
+        return rows
+    # API providers often move history under result/history/records without notice.
+    fallback=extract_any_history(data)
+    return fallback if len(fallback)>len(rows) else rows
 
 
 def extract_any_history(data):
@@ -533,7 +550,7 @@ def _sun_walk(obj):
 def _sun_session_id(item):
     if not isinstance(item,dict): return None
     low={str(k).lower():v for k,v in item.items()}
-    for k in ("phien","phiên","sessionid","session_id","session","sid","referenceid","reference_id","id"):
+    for k in ("phien","phiên","sessionid","session_id","session","sid","roundid","round_id","round","referenceid","reference_id","id"):
         if k in low and low[k] is not None and not isinstance(low[k],(dict,list)):
             s=str(low[k]).strip()
             if s: return s
@@ -596,34 +613,64 @@ def find_sunwin_current_session(data):
     candidates.sort(reverse=True)
     return candidates[0][2]
 
-def get_sunwin_upstream():
-    """SUNWIN adapter with single-flight, retry and recent-real-data fallback."""
+def _fetch_json_source(url, table, cache_slot, user_agent):
+    """Fetch one JSON source with single-flight-friendly cache semantics."""
     import time as _time
+    now=_time.time();cached=cache_slot.get("data");cached_ts=float(cache_slot.get("ts") or 0)
+    if cached is not None and now-cached_ts < 2.4:
+        return cached
+    headers={
+        "Accept":"application/json, text/plain, */*",
+        "User-Agent":user_agent,
+        "Cache-Control":"no-cache",
+        "Pragma":"no-cache",
+        "Connection":"keep-alive",
+    }
+    last_err=None
+    for timeout in (4.0,6.2):
+        try:
+            r=requests.get(url,headers=headers,timeout=timeout)
+            r.raise_for_status()
+            try:data=r.json()
+            except ValueError:
+                # Some providers return JSON with a text/plain content type.
+                data=json.loads(r.text.lstrip('\ufeff').strip())
+            cache_slot["ts"]=_time.time();cache_slot["data"]=data
+            _SOURCE_ERRORS[table]=""
+            st=_SOURCE_STATE.setdefault(table,{"sid":None,"changed":_time.time()});st["last_success"]=_time.time()
+            return data
+        except requests.HTTPError as e:
+            code=getattr(getattr(e,'response',None),'status_code',None);last_err=f"HTTP {code or 'ERR'}"
+        except requests.Timeout:last_err="timeout"
+        except requests.RequestException:last_err="không kết nối được"
+        except (ValueError,json.JSONDecodeError):last_err="JSON không hợp lệ"
+    _SOURCE_ERRORS[table]=last_err or "không phản hồi"
+    if cached is not None and _time.time()-cached_ts < 35.0:
+        return cached
+    raise RuntimeError(f"{table.upper()} API {_SOURCE_ERRORS[table]}")
+
+
+def get_sunwin_upstream():
+    """SUNWIN adapter. Supports a separate history endpoint when configured.
+
+    `sunwin_api_url` may be a current+history endpoint. If the provider exposes
+    history separately, set `sunwin_history_api_url`; otherwise the same real
+    payload is reused for both roles.
+    """
     table="sunwin"
-    api_url=get_setting("sunwin_api_url",SUNWIN_API).strip()
-    if not api_url: raise RuntimeError("Chưa cấu hình SUNWIN API")
-    now=_time.time(); cached=_SUNWIN_CACHE.get("data"); cached_ts=float(_SUNWIN_CACHE.get("ts") or 0)
-    if cached is not None and now-cached_ts < 2.4:return cached,cached
+    current_url=get_setting("sunwin_api_url",SUNWIN_API).strip()
+    history_url=get_setting("sunwin_history_api_url","").strip() or current_url
+    if not current_url:raise RuntimeError("Chưa cấu hình SUNWIN API")
     lock=_UPSTREAM_LOCKS.setdefault(table,threading.Lock())
     with lock:
-        now=_time.time();cached=_SUNWIN_CACHE.get("data");cached_ts=float(_SUNWIN_CACHE.get("ts") or 0)
-        if cached is not None and now-cached_ts < 2.4:return cached,cached
-        headers={"Accept":"application/json, text/plain, */*","User-Agent":"TAIXIUTOOL-SUNWIN/1.0","Cache-Control":"no-cache","Pragma":"no-cache"}
-        last_err=None
-        for timeout in (4.0,6.5):
-            try:
-                r=requests.get(api_url,headers=headers,timeout=timeout);r.raise_for_status();data=r.json()
-                _SUNWIN_CACHE["ts"]=_time.time();_SUNWIN_CACHE["data"]=data
-                _SOURCE_ERRORS[table]="";st=_SOURCE_STATE.setdefault(table,{"sid":None,"changed":_time.time()});st["last_success"]=_time.time()
-                return data,data
-            except requests.HTTPError as e:
-                code=getattr(getattr(e,'response',None),'status_code',None);last_err=f"HTTP {code or 'ERR'}"
-            except requests.Timeout:last_err="timeout"
-            except requests.RequestException:last_err="không kết nối được"
-            except ValueError:last_err="JSON không hợp lệ"
-        _SOURCE_ERRORS[table]=last_err or "không phản hồi"
-        if cached is not None and _time.time()-cached_ts < 35.0:return cached,cached
-        raise RuntimeError(f"SUNWIN API {_SOURCE_ERRORS[table]}")
+        current=_fetch_json_source(current_url,table,_SUNWIN_CACHE["current"],"TAIXIUTOOL-SUNWIN/2.0")
+        if history_url==current_url:
+            # Keep both cache slots aligned so a later history URL change starts cleanly.
+            _SUNWIN_CACHE["history"]["ts"]=_SUNWIN_CACHE["current"]["ts"]
+            _SUNWIN_CACHE["history"]["data"]=current
+            return current,current
+        history=_fetch_json_source(history_url,table,_SUNWIN_CACHE["history"],"TAIXIUTOOL-SUNWIN-HISTORY/2.0")
+        return current,history
 
 
 # =============================================================
@@ -2449,6 +2496,41 @@ def _core_multiscale(hist):
     return _v61_clamp(edge,-1,1),min(1.8,.35+tot*.28)
 
 
+def _core_state_consensus(hist):
+    """Consensus of transition/context/run models over independent windows.
+
+    A direction is emitted only when several windows point the same way. The
+    candidate is still walk-forward validated by `_core_ensemble`, so this is
+    a stability feature rather than a hard-coded T/X rule.
+    """
+    if len(hist)<44:return 0.0,0.0
+    votes=[]
+    for win,ww in ((28,1.0),(48,.92),(80,.78),(128,.62),(220,.46)):
+        h=hist[-min(win,len(hist)):]
+        if len(h)<24:continue
+        local=[]
+        for fn,mul in ((lambda x:_v61_markov(x,2),1.0),(lambda x:_v61_markov(x,3),.9),
+                       (lambda x:_v61_context(x,3),1.0),(lambda x:_v61_context(x,4),.9),
+                       (lambda x:_v61_run(x),.72)):
+            try:e,sup=fn(h)
+            except Exception:continue
+            if sup>.10 and abs(e)>=.045:local.append((e,mul*min(1.0,.35+sup*.38)))
+        if len(local)<2:continue
+        den=sum(w for _,w in local) or 1.0
+        edge=sum(e*w for e,w in local)/den
+        pos=sum(w for e,w in local if e>0);neg=sum(w for e,w in local if e<0)
+        ag=max(pos,neg)/max(.001,pos+neg)
+        if ag<.62 or abs(edge)<.05:continue
+        votes.append((edge,ww*ag))
+    if len(votes)<3:return 0.0,0.0
+    den=sum(w for _,w in votes) or 1.0
+    edge=sum(e*w for e,w in votes)/den
+    pos=sum(w for e,w in votes if e>0);neg=sum(w for e,w in votes if e<0)
+    ag=max(pos,neg)/max(.001,pos+neg)
+    if ag<.68:return 0.0,.30
+    return _v61_clamp(edge,-1,1),min(2.0,.35+len(votes)*.22+ag*.45)
+
+
 def _learning_context_keys(hist):
     """Dynamic signatures. They are learned only after a REAL next result settles."""
     if len(hist)<8:return []
@@ -2544,7 +2626,7 @@ def _online_pattern_signal(hist,table_name):
 def _core_candidates(game='lc79',table_name=None):
     c=_v61_lc79_candidates() if game=='lc79' else _v61_sunwin_candidates()
     c.pop('MOM',None);c['RHYTHM']=_v68_rhythm;c['SHAPE']=_v68_shape;c['BREAK']=_v68_break_transition
-    c['MOTIF']=_core_motif;c['RUNSIG']=_core_run_signature;c['ANALOG']=_core_knn_analog;c['PROFILE']=_core_context_profile;c['MULTI']=_core_multiscale
+    c['MOTIF']=_core_motif;c['RUNSIG']=_core_run_signature;c['ANALOG']=_core_knn_analog;c['PROFILE']=_core_context_profile;c['MULTI']=_core_multiscale;c['STATESTACK']=_core_state_consensus
     if table_name:c['LEARNED']=lambda h:_online_pattern_signal(h,table_name)
     return c
 
@@ -2553,7 +2635,7 @@ def _core_family(name):
     if name.startswith('MK') or name=='VOM' or name.startswith('BAYES'):return 'CHUYỂN TIẾP'
     if name.startswith('CTX') or name in ('PAIR','MOTIF','PROFILE'):return 'NGỮ CẢNH'
     return {'RHYTHM':'NHỊP','SHAPE':'HÌNH THÁI','BREAK':'ĐIỂM GÃY','RUN':'BỆT',
-            'RUNSIG':'TRẠNG THÁI NHỊP','REGIME':'CHẾ ĐỘ','CYCLE':'CHU KỲ','ANALOG':'TƯƠNG ĐỒNG','MULTI':'ĐA KHUNG','LEARNED':'TỰ HỌC'}.get(name,name)
+            'RUNSIG':'TRẠNG THÁI NHỊP','REGIME':'CHẾ ĐỘ','CYCLE':'CHU KỲ','ANALOG':'TƯƠNG ĐỒNG','MULTI':'ĐA KHUNG','STATESTACK':'ĐỒNG THUẬN','LEARNED':'TỰ HỌC'}.get(name,name)
 
 
 def _core_structural_anchor(hist,candidates):
@@ -2711,14 +2793,16 @@ def _core_ensemble(hist,candidates,mode=2,force=False):
     if mode==1:skip_skill,skip_edge,skip_ag=.526,.050,.585
     elif mode==3:skip_skill,skip_edge,skip_ag=.500,.020,.520
     else:skip_skill,skip_edge,skip_ag=.512,.033,.550
-    weak=(avg_skill<skip_skill and (edge<skip_edge or agreement<skip_ag)) or (independent<2 and not structural)
+    min_independent=2 if mode==3 else 3
+    no_edge_over_naive=(family_lift<=.002 and avg_skill<.525 and not structural)
+    weak=(avg_skill<skip_skill and (edge<skip_edge or agreement<skip_ag)) or (independent<min_independent and not structural) or (mode!=3 and no_edge_over_naive)
     unstable=(cp>.58 and agreement<.60 and edge<.08);noisy=(diag['noise']>=89 and diag['clarity']<34 and not structural)
     if weak or unstable or noisy:
         conf=int(round(_v61_clamp(49+max(0,avg_skill-.5)*95+edge*13+(agreement-.5)*9,50,68)))
         if not force:return None,conf,f"{diag['pattern']} · {diag['regime']} · BỎ QUA"
         side,fb_conf,fb_reason=_core_best_effort(hist);return side,min(conf,fb_conf),fb_reason
     raw=47+max(0,avg_skill-.5)*122+max(0,agreement-.5)*23+edge*16+(1-ent)*3+(1-cp)*2
-    conf=int(round(_v61_clamp(raw,50,87)))
+    conf=int(round(_v61_clamp(raw,50,84)))
     # Honest calibration caps.  Few independent families, weak OOS skill, or a
     # transition regime must not display an inflated confidence number.
     if independent<3:conf=min(conf,74)
@@ -2795,11 +2879,20 @@ def _store_for_key(kid,table,seq,actual_map,next_sid,side,conf,reason):
         if existing is not None:return existing['side'],int(existing['confidence'] or 50),existing['reason'] or reason
         final_side,final_conf,final_reason=side,conf,reason
         if final_side is None:
-            recent=con.execute('SELECT side FROM history WHERE key_id=? AND table_name=? ORDER BY id DESC LIMIT 39',(kid,table)).fetchall()
-            if sum(1 for r in recent if r['side'] is None)>=2:
-                if table=='sunwin':final_side,final_conf,final_reason=predict_sunwin_core(seq,force=True,table_name=table)
-                elif table in ('max789_hu','max789_md5'):final_side,final_conf,final_reason=predict_max789_core(seq,force=True,table_name=table)
-                else:final_side,final_conf,final_reason=predict_lc79_core(seq,force=True,table_name=table)
+            mode=(setting_int('sunwin_algo_mode',2,1,3) if table=='sunwin' else setting_int('max789_algo_mode',3,1,3) if table.startswith('max789_') else setting_int('lc79_algo_mode',2,1,3))
+            if mode==3:
+                recent=con.execute('SELECT side FROM history WHERE key_id=? AND table_name=? ORDER BY id DESC LIMIT 8',(kid,table)).fetchall()
+                consecutive_skips=0
+                for r in recent:
+                    if r['side'] is None:consecutive_skips+=1
+                    else:break
+                if consecutive_skips>=4:
+                    if table=='sunwin':cand_side,cand_conf,cand_reason=predict_sunwin_core(seq,force=True,table_name=table)
+                    elif table in ('max789_hu','max789_md5'):cand_side,cand_conf,cand_reason=predict_max789_core(seq,force=True,table_name=table)
+                    else:cand_side,cand_conf,cand_reason=predict_lc79_core(seq,force=True,table_name=table)
+                    # Coverage fallback is intentionally labelled/capped; it is not promoted to a strong signal.
+                    if cand_side in ('T','X') and int(cand_conf or 0)>=53:
+                        final_side,final_conf,final_reason=cand_side,min(int(cand_conf),58),(cand_reason or '')+' · COVERAGE'
         con.execute('''INSERT OR IGNORE INTO history(key_id,table_name,session_id,side,confidence,reason,created_at)
                        VALUES(?,?,?,?,?,?,?)''',(kid,table,next_sid,final_side,final_conf,final_reason,now_iso()))
         return final_side,final_conf,final_reason
@@ -3493,8 +3586,11 @@ def game_config():
     return jsonify({
       "lc79_game_url":get_setting("lc79_game_url",LC79_GAME_URL),
       "lc79_enabled":setting_bool("lc79_enabled",True),
+      "lc79_hu_ready":bool(get_setting("lc79_hu_api_url",UPSTREAM_HU).strip()),
+      "lc79_md5_ready":bool(get_setting("lc79_md5_api_url",UPSTREAM_MD5).strip()),
       "sunwin_game_url":get_setting("sunwin_game_url",SUNWIN_GAME_URL),
       "sunwin_enabled":setting_bool("sunwin_enabled",True) and bool(get_setting("sunwin_api_url",SUNWIN_API).strip()),
+      "sunwin_history_ready":bool((get_setting("sunwin_history_api_url","").strip() or get_setting("sunwin_api_url",SUNWIN_API).strip())),
       "max789_game_url":get_setting("max789_game_url",MAX789_GAME_URL),
       "max789_enabled":setting_bool("max789_enabled",True) and bool(get_setting("max789_hu_api_url",MAX789_HU_API).strip() and get_setting("max789_md5_api_url",MAX789_MD5_API).strip())
     })
@@ -3516,7 +3612,10 @@ def public_config():
       "max789_algo_mode":setting_int("max789_algo_mode",3,1,3),
       "gps_prompt":setting_bool("gps_prompt",True),
       "lc79_game_url":get_setting("lc79_game_url",LC79_GAME_URL),
+      "lc79_hu_ready":bool(get_setting("lc79_hu_api_url",UPSTREAM_HU).strip()),
+      "lc79_md5_ready":bool(get_setting("lc79_md5_api_url",UPSTREAM_MD5).strip()),
       "sunwin_game_url":get_setting("sunwin_game_url",SUNWIN_GAME_URL),
+      "sunwin_source_ready":bool(get_setting("sunwin_api_url",SUNWIN_API).strip()),
       "max789_game_url":get_setting("max789_game_url",MAX789_GAME_URL),
       "site_announcement":get_setting("site_announcement",""),
       "notice_enabled":setting_bool("notice_enabled",True),
@@ -4081,10 +4180,15 @@ def source_status():
         st=_SOURCE_STATE.get(table) or {}
         age=max(0,int(now-float(st.get('changed') or now))) if st.get('sid') else None
         last_success=int(max(0,now-float(st.get('last_success')))) if st.get('last_success') else None
+        configured=(bool(get_setting('lc79_hu_api_url',UPSTREAM_HU).strip()) if table=='hu' else
+                    bool(get_setting('lc79_md5_api_url',UPSTREAM_MD5).strip()) if table=='md5' else
+                    bool(get_setting('sunwin_api_url',SUNWIN_API).strip()) if table=='sunwin' else
+                    bool(get_setting('max789_hu_api_url',MAX789_HU_API).strip()) if table=='max789_hu' else
+                    bool(get_setting('max789_md5_api_url',MAX789_MD5_API).strip()))
         out[table]={
-          'latest_sid':st.get('sid'),'age_seconds':age,'seen':bool(st.get('sid')),
+          'configured':configured,'latest_sid':st.get('sid'),'age_seconds':age,'seen':bool(st.get('sid')),
           'last_success_ago_seconds':last_success,'error':_SOURCE_ERRORS.get(table) or '',
-          'state':'live' if st.get('sid') and (age is None or age<=SOURCE_STALE_SECONDS) else ('slow' if st.get('sid') else 'waiting')
+          'state':'off' if not configured else ('live' if st.get('sid') and (age is None or age<=SOURCE_STALE_SECONDS) else ('slow' if st.get('sid') else 'waiting'))
         }
     return jsonify({'ok':True,'stale_after':SOURCE_STALE_SECONDS,'hard_stale_after':SOURCE_HARD_STALE_SECONDS,'sources':out})
 
@@ -4132,7 +4236,8 @@ def admin_update_settings():
       "lc79_poll_seconds":("int",2,60),"sunwin_poll_seconds":("int",2,60),"max789_poll_seconds":("int",2,60),
       "history_refresh_seconds":("int",10,120),"history_limit":("int",20,200),"history_ttl_hours":("int",1,168),
       "lc79_algo_mode":("int",1,3),"sunwin_algo_mode":("int",1,3),"max789_algo_mode":("int",1,3),"gps_prompt":("int",0,1),
-      "lc79_game_url":("url",8,300),"sunwin_game_url":("url",8,300),"sunwin_api_url":("url",8,500),
+      "lc79_game_url":("url",8,300),"lc79_hu_api_url":("url",8,500),"lc79_md5_api_url":("url",8,500),
+      "sunwin_game_url":("url",8,300),"sunwin_api_url":("url",8,500),"sunwin_history_api_url":("url_optional",0,500),
       "max789_game_url":("url",8,300),"max789_hu_api_url":("url",8,500),"max789_md5_api_url":("url",8,500),
       "site_announcement":("str",0,600),"notice_enabled":("int",0,1),"notice_title":("str",0,80),"notice_body":("str",0,1200),
       "notice_telegram_url":("str",0,300),"notice_zalo_url":("str",0,300),"notice_support_phone":("str",0,40),"notice_remind_minutes":("int",5,1440),
@@ -4153,9 +4258,11 @@ def admin_update_settings():
         try:
             if typ=="int":
                 v=max(lo,min(hi,int(v)))
-            elif typ=="url":
+            elif typ in ("url","url_optional"):
                 v=str(v).strip()
-                if not re.match(r"^https?://[^\s]+$",v,re.I):
+                if typ=="url_optional" and not v:
+                    pass
+                elif not re.match(r"^https?://[^\s]+$",v,re.I):
                     return jsonify({"detail":f"{k} phải là URL http/https hợp lệ"}),400
                 if len(v)>hi:return jsonify({"detail":f"{k} quá dài"}),400
             elif typ=="color":
