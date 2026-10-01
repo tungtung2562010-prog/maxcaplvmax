@@ -2388,7 +2388,8 @@ function applyGameStage(){
 }
 
 function authHeaders(extra={}) {
-  return Object.assign({"Content-Type":"application/json"}, accessToken ? {"Authorization":"Bearer "+accessToken} : {}, extra);
+  const did=localStorage.getItem("lc79_device_v35")||"";
+  return Object.assign({"Content-Type":"application/json"}, accessToken ? {"Authorization":"Bearer "+accessToken} : {}, did?{"X-Device-ID":did}:{}, extra);
 }
 async function api(path, opts={}) {
   const r = await fetch(BACKEND + path, {
@@ -3118,7 +3119,7 @@ let portalToken=localStorage.getItem(PORTAL_TOKEN_KEY)||"";
 let portalProfile=null,portalAuthState='login',portalDepositTimer=null;
 function moneyVN(v){return new Intl.NumberFormat('vi-VN').format(Number(v||0))+'đ'}
 function fmtPortalTime(v){if(!v)return'-';try{return new Date(v).toLocaleString('vi-VN',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit',year:'numeric'})}catch(_){return v}}
-async function portalFetch(path,opt={}){const h={"Content-Type":"application/json",...(opt.headers||{})};if(portalToken)h.Authorization='Bearer '+portalToken;const r=await fetch(BACKEND+path,{...opt,headers:h,cache:'no-store'});let d={};try{d=await r.json()}catch(_){}if(!r.ok){if(r.status===401&&path!='/api/account/login'&&path!='/api/account/register'){portalToken='';localStorage.removeItem(PORTAL_TOKEN_KEY)}throw new Error(d.detail||('HTTP '+r.status))}return d}
+async function portalFetch(path,opt={}){const h={"Content-Type":"application/json",...(opt.headers||{})};const __did=localStorage.getItem("lc79_device_v35")||await getDeviceId();if(__did)h["X-Device-ID"]=__did;if(portalToken)h.Authorization='Bearer '+portalToken;const r=await fetch(BACKEND+path,{...opt,headers:h,cache:'no-store'});let d={};try{d=await r.json()}catch(_){}if(!r.ok){if(r.status===401&&path!='/api/account/login'&&path!='/api/account/register'){portalToken='';localStorage.removeItem(PORTAL_TOKEN_KEY)}throw new Error(d.detail||('HTTP '+r.status))}return d}
 function portalShow(id){['portal-start','portal-auth','portal-app'].forEach(x=>document.getElementById(x)?.classList.toggle('portal-hidden',x!==id))}
 function portalSetPage(page){document.querySelectorAll('.portal-page').forEach(x=>x.classList.toggle('on',x.id==='portal-'+page));document.querySelectorAll('.portal-dock button').forEach(x=>x.classList.toggle('on',x.dataset.page===page));const app=document.getElementById('portal-app');if(app)app.scrollTo({top:0,behavior:'smooth'});if(page==='keys')portalLoadPlans();if(page==='deposit')portalLoadDeposit();if(page==='home')refreshSourceBoard?.()}
 async function portalRefresh(){const d=await portalFetch('/api/account/me');portalProfile=d.profile;document.getElementById('ph-user').textContent=portalProfile.username;document.getElementById('portal-balance').textContent=moneyVN(portalProfile.balance_vnd);document.getElementById('ph-balance').textContent=moneyVN(portalProfile.balance_vnd);const __ann=d.announcement||appConfig.site_announcement||'Chào mừng bạn.';document.getElementById('portal-notice').textContent=__ann;if(__ann&&__ann!==__lastAnnouncement){__lastAnnouncement=__ann;portalToast('📣 '+__ann);}document.getElementById('ph-key').textContent=portalProfile.key?('••••••'+(portalProfile.key.hint||'')):'CHƯA CÓ';document.getElementById('ph-exp').textContent=portalProfile.key?(compactTimeLeft(portalProfile.key.expires_at)+' · '+fmtPortalTime(portalProfile.key.expires_at)):'-';document.getElementById('ph-login').textContent=fmtPortalTime(portalProfile.last_login_at);document.getElementById('ph-device').textContent=localDeviceLabel();
@@ -3226,7 +3227,7 @@ setInterval(()=>{if(!document.hidden)refreshSourceBoard()},12000);
 window.addEventListener('online',refreshSourceBoard,{passive:true});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshSourceBoard()},{passive:true});
 
-function portalInit(){ensureKeyGate();document.getElementById('key-gate').style.display='none';setToolVisible(false);portalShow('portal-start');document.getElementById('portal-start-btn').onclick=async()=>{const b=document.getElementById('portal-start-btn');b.textContent='ĐANG KHỞI TẠO...';if(await portalResume()){portalSetPage('home')}else{portalShow('portal-auth');portalAuthMode('login')}b.textContent=(appConfig.start_button_text||'BẮT ĐẦU')+' →'};document.getElementById('pa-login-tab').onclick=()=>portalAuthMode('login');document.getElementById('pa-reg-tab').onclick=()=>portalAuthMode('register');document.getElementById('pa-forgot').onclick=()=>portalAuthMode('forgot');document.getElementById('pa-eye').onclick=()=>{const i=document.getElementById('pa-pass');i.type=i.type==='password'?'text':'password'};document.getElementById('pa-submit').onclick=portalSubmitAuth;document.getElementById('pa-pass').addEventListener('keydown',e=>{if(e.key==='Enter')portalSubmitAuth()});document.getElementById('pa-code').addEventListener('keydown',e=>{if(e.key==='Enter')portalSubmitAuth()});document.getElementById('ph-link-btn').onclick=portalLinkKey;document.getElementById('portal-logout').onclick=()=>{portalToken='';localStorage.removeItem(PORTAL_TOKEN_KEY);portalShow('portal-auth');portalAuthMode('login')};document.querySelectorAll('.portal-dock button').forEach(b=>b.onclick=()=>portalSetPage(b.dataset.page));document.querySelectorAll('.portal-mode-btn').forEach(b=>b.onclick=e=>{e.stopPropagation();portalEnterGame(b.dataset.enterGame,b.dataset.enterTable)});document.querySelectorAll('.portal-game-card').forEach(card=>card.onclick=()=>{const b=card.querySelector('.portal-mode-btn');if(b)portalEnterGame(b.dataset.enterGame,b.dataset.enterTable)});document.querySelectorAll('#portal-amounts button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#portal-amounts button').forEach(x=>x.classList.remove('on'));b.classList.add('on');document.getElementById('portal-deposit-amount').value=b.dataset.v});document.getElementById('portal-deposit-create').onclick=portalCreateDeposit;document.getElementById('game-back-btn').onclick=portalExitGame;const gdo=document.getElementById('game-direct-open');if(gdo)gdo.onclick=()=>{const u=gdo.dataset.url;if(u)window.open(u,'_blank','noopener,noreferrer')}}
+function portalInit(){ensureKeyGate();document.getElementById('key-gate').style.display='none';setToolVisible(false);portalShow('portal-start');document.getElementById('portal-start-btn').onclick=async()=>{const b=document.getElementById('portal-start-btn');b.textContent='ĐANG KHỞI TẠO...';if(await portalResume()){portalSetPage('home')}else{portalShow('portal-auth');portalAuthMode('login')}b.textContent=(appConfig.start_button_text||'BẮT ĐẦU')+' →'};document.getElementById('pa-login-tab').onclick=()=>portalAuthMode('login');document.getElementById('pa-reg-tab').onclick=()=>portalAuthMode('register');document.getElementById('pa-forgot').onclick=()=>portalAuthMode('forgot');document.getElementById('pa-eye').onclick=()=>{const i=document.getElementById('pa-pass');i.type=i.type==='password'?'text':'password'};document.getElementById('pa-submit').onclick=portalSubmitAuth;document.getElementById('pa-pass').addEventListener('keydown',e=>{if(e.key==='Enter')portalSubmitAuth()});document.getElementById('pa-code').addEventListener('keydown',e=>{if(e.key==='Enter')portalSubmitAuth()});document.getElementById('ph-link-btn').onclick=portalLinkKey;document.getElementById('portal-logout').onclick=async()=>{try{if(portalToken)await portalFetch('/api/account/logout',{method:'POST',body:'{}'})}catch(_){}portalToken='';accessToken='';localStorage.removeItem(PORTAL_TOKEN_KEY);localStorage.removeItem(TOKEN_KEY);localStorage.removeItem(EXP_KEY);portalShow('portal-auth');portalAuthMode('login')};document.querySelectorAll('.portal-dock button').forEach(b=>b.onclick=()=>portalSetPage(b.dataset.page));document.querySelectorAll('.portal-mode-btn').forEach(b=>b.onclick=e=>{e.stopPropagation();portalEnterGame(b.dataset.enterGame,b.dataset.enterTable)});document.querySelectorAll('.portal-game-card').forEach(card=>card.onclick=()=>{const b=card.querySelector('.portal-mode-btn');if(b)portalEnterGame(b.dataset.enterGame,b.dataset.enterTable)});document.querySelectorAll('#portal-amounts button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#portal-amounts button').forEach(x=>x.classList.remove('on'));b.classList.add('on');document.getElementById('portal-deposit-amount').value=b.dataset.v});document.getElementById('portal-deposit-create').onclick=portalCreateDeposit;document.getElementById('game-back-btn').onclick=portalExitGame;const gdo=document.getElementById('game-direct-open');if(gdo)gdo.onclick=()=>{const u=gdo.dataset.url;if(u)window.open(u,'_blank','noopener,noreferrer')}}
 
 window.__startTool=async function(){
   // V49: mỗi lần mở web luôn yêu cầu xác minh key lại.
@@ -4171,7 +4172,7 @@ body.portal-game-mode.v9-embedded #license-chip{z-index:3000170!important}
     let shell=$('v9-game-shell');
     if(shell)return shell;
     shell=document.createElement('div');shell.id='v9-game-shell';
-    shell.innerHTML='<iframe id="v9-game-iframe" title="Game" allow="fullscreen; autoplay; clipboard-read; clipboard-write; gamepad" referrerpolicy="strict-origin-when-cross-origin"></iframe><div id="v9-game-status"><i></i><div class="v9-copy"><b id="v9-game-name">GAME</b><small id="v9-game-state">ĐANG KẾT NỐI · TOOL CHỜ KEY</small></div></div>';
+    shell.innerHTML='<iframe id="v9-game-iframe" title="Game" allow="fullscreen *; autoplay *; clipboard-read *; clipboard-write *; gamepad *" allowfullscreen webkitallowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe><div id="v9-game-status"><i></i><div class="v9-copy"><b id="v9-game-name">GAME</b><small id="v9-game-state">ĐANG KẾT NỐI · TOOL CHỜ KEY</small></div></div>';
     document.body.appendChild(shell);return shell;
   }
   function cleanUrl(v){try{const u=new URL(String(v||'').trim(),location.href);return /^https?:$/.test(u.protocol)?u.href:''}catch(_){return ''}}
@@ -4245,7 +4246,7 @@ body.portal-game-mode.v9-embedded #license-chip{z-index:3000170!important}
       }
     }catch(e){console.warn('[V9 tool session]',e?.message||e)}
     if(seq!==entrySeq)return;
-    const ready=!!(sess?.token||accessToken);
+    const ready=!!sess?.token;if(!ready){accessToken='';accessExpiresAt='';localStorage.removeItem(TOKEN_KEY);localStorage.removeItem(EXP_KEY);}
     document.body.classList.toggle('v9-no-tool',!ready);
     document.body.classList.remove('game-guest');
     try{setToolVisible(ready)}catch(_){
@@ -4264,14 +4265,19 @@ body.portal-game-mode.v9-embedded #license-chip{z-index:3000170!important}
   }
   async function enter(game,table){
     if(entering)return;entering=true;const seq=++entrySeq;const target=normalize(game,table);
-    const done=typeof vipLoading==='function'?vipLoading('ĐANG MỞ '+(target.game==='custom'?'GAME':target.game.toUpperCase()),'Mở game ngay trong TAIXIUTOOL + gắn robot...',360):(()=>{});
+    let toolStarted=false;
     try{
+      // V10: paint the embedded game shell immediately from cached/default config.
+      // No redirect, no new tab, no auth spinner blocking the iframe.
+      const cached=gameConfig||{};let url=urlFor(target,cached);
+      if(url){setShell(target,cached,url);attachTool(target,seq);toolStarted=true}
       const cfg=await freshConfig();if(seq!==entrySeq)return;
-      const url=urlFor(target,cfg);
-      if(!url){try{portalToast?.('Game chưa có link. Admin cần cấu hình game_url.','err')}catch(_){alert('Game chưa có link.')}return}
-      setShell(target,cfg,url);
-      attachTool(target,seq); // deliberately async: iframe opens immediately, auth never blocks game.
-    }finally{entering=false;try{done()}catch(_){ }}
+      const freshUrl=urlFor(target,cfg);
+      if(!freshUrl&&!url){try{portalToast?.('Game chưa có link. Admin cần cấu hình game_url.','err')}catch(_){alert('Game chưa có link.')}return}
+      if(freshUrl&&freshUrl!==url){url=freshUrl;setShell(target,cfg,url)}
+      else if(!toolStarted){setShell(target,cfg,freshUrl||url)}
+      if(!toolStarted){attachTool(target,seq);toolStarted=true}
+    }finally{entering=false}
   }
   function exit(){
     ++entrySeq;entering=false;
@@ -4305,5 +4311,60 @@ body.portal-game-mode.v9-embedded #license-chip{z-index:3000170!important}
   ensureShell();
 })();
 </script>
-</body>
+\n<style id="v10-liquid-clarity-security">
+:root{--v10-cyan:#37dce9;--v10-mint:#4de7b2;--v10-violet:#7d79ff;--v10-ink:#102f3c;--v10-sub:#587582;--v10-glass:rgba(248,253,255,.72);--v10-line:rgba(255,255,255,.92)}
+body{background:#dff2f6!important;color:var(--v10-ink)!important}
+#portal-app{isolation:isolate;background:transparent!important}
+#portal-app::before{content:"";position:fixed;inset:0;z-index:-3;background:url('/assets/htung_blur.webp') center 34%/cover no-repeat;filter:saturate(.96) brightness(1.05);transform:scale(1.025)}
+#portal-app::after{content:"";position:fixed;inset:0;z-index:-2;background:linear-gradient(180deg,rgba(238,250,253,.82),rgba(241,248,255,.76) 48%,rgba(233,247,250,.86)),radial-gradient(circle at 12% 16%,rgba(57,220,233,.18),transparent 31%),radial-gradient(circle at 86% 22%,rgba(125,121,255,.15),transparent 34%);backdrop-filter:blur(11px);-webkit-backdrop-filter:blur(11px)}
+.portal-main,.portal-page{background:transparent!important}
+.portal-top,.ultra-panel,.portal-stat,.portal-game-card,.account-pro-shell,.account-pro-hero,.account-info-pro .info-cell,.key-wallet-strip,.portal-deposit-box,.notice-card,.source-board,.motion-showcase,.motion-live-main,.motion-live-side{background:linear-gradient(145deg,rgba(255,255,255,.79),rgba(240,250,253,.61))!important;border:1px solid rgba(255,255,255,.94)!important;box-shadow:0 18px 48px rgba(42,83,100,.13),inset 0 1px 0 #fff!important;color:var(--v10-ink)!important;-webkit-backdrop-filter:blur(24px) saturate(1.28)!important;backdrop-filter:blur(24px) saturate(1.28)!important}
+.portal-game-card{border-radius:28px!important;padding:10px!important;overflow:hidden!important;position:relative!important;box-shadow:0 16px 40px rgba(37,75,92,.15),0 0 0 1px rgba(255,255,255,.56) inset!important}
+.portal-game-card::before{content:"";position:absolute;inset:0;border-radius:inherit;padding:1.5px;background:linear-gradient(115deg,rgba(55,220,233,.88),rgba(255,255,255,.25) 32%,rgba(125,121,255,.60) 66%,rgba(77,231,178,.80));-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none;animation:v10Led 4.8s linear infinite;background-size:220% 220%}
+@keyframes v10Led{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+.ultra-card-image{border-radius:22px!important;overflow:hidden!important;background:#edf8fb!important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.88)!important}
+.ultra-card-image img{width:100%!important;height:100%!important;object-fit:cover!important;filter:saturate(1.08) contrast(1.03)!important}
+.ultra-card-copy{padding:11px 5px 7px!important}.ultra-card-copy small{color:#3e9aaa!important;font-weight:1000!important;letter-spacing:1.5px!important}.portal-game-card h3,.ultra-card-copy h3{color:#102e3b!important;font-size:clamp(21px,5.5vw,31px)!important;line-height:1!important;font-weight:1000!important;letter-spacing:-.02em!important;text-shadow:0 1px 0 rgba(255,255,255,.9)!important}.portal-game-card p{color:#54717d!important;font-weight:800!important;font-size:10px!important;line-height:1.45!important}.v5-engine-row span{background:rgba(255,255,255,.74)!important;border:1px solid rgba(75,198,214,.28)!important;color:#2c6e79!important;font-weight:1000!important;box-shadow:inset 0 1px 0 #fff!important}.ultra-live{background:rgba(244,255,251,.91)!important;color:#168b6f!important;border:1px solid rgba(38,202,151,.26)!important;box-shadow:0 6px 20px rgba(23,123,94,.11)!important}.portal-mode-btn{min-height:54px!important;border-radius:18px!important;background:linear-gradient(120deg,rgba(255,255,255,.95),rgba(213,250,248,.92) 45%,rgba(221,230,255,.94))!important;border:1px solid rgba(255,255,255,.98)!important;color:#184a57!important;font-weight:1000!important;box-shadow:0 10px 26px rgba(48,96,113,.12),inset 0 1px 0 #fff!important}.portal-mode-btn:active{transform:scale(.975)!important}
+.portal-dock{background:rgba(247,252,255,.80)!important;border-color:rgba(255,255,255,.96)!important;box-shadow:0 16px 46px rgba(34,73,91,.18)!important}.portal-dock button{color:#516e78!important}.portal-dock button.on{background:linear-gradient(135deg,rgba(208,251,248,.95),rgba(226,235,255,.94))!important;color:#164b57!important;box-shadow:0 8px 24px rgba(39,121,134,.13),inset 0 0 0 1px #fff!important}
+#v10-slogan{position:relative;margin:10px 0 14px;padding:10px 0;overflow:hidden;border:1px solid rgba(255,255,255,.9);border-radius:999px;background:rgba(250,254,255,.73);box-shadow:0 10px 30px rgba(31,82,99,.10);white-space:nowrap}.v10-slogan-track{display:inline-block;padding-left:100%;animation:v10Marquee 22s linear infinite;color:#214d59;font:1000 9px/1 system-ui;letter-spacing:.9px}.v10-slogan-track b{color:#168f99}.v10-slogan-track em{color:#6b63d9;font-style:normal}@keyframes v10Marquee{to{transform:translateX(-100%)}}
+#v10-api-panel{margin:10px 0 18px;padding:13px;border-radius:24px;background:rgba(250,254,255,.74);border:1px solid rgba(255,255,255,.94);box-shadow:0 14px 36px rgba(40,82,100,.12);-webkit-backdrop-filter:blur(22px);backdrop-filter:blur(22px)}#v10-api-panel .v10-api-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:9px}#v10-api-panel .v10-api-head b{font:1000 11px system-ui;color:#173c49}#v10-api-panel .v10-api-head span{font:900 7px system-ui;color:#718a94;letter-spacing:.8px}.v10-api-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.v10-api-chip{padding:9px;border-radius:15px;background:rgba(255,255,255,.78);border:1px solid rgba(89,191,205,.18)}.v10-api-chip b{display:block;font:1000 8px system-ui;color:#214e59}.v10-api-chip small{display:block;margin-top:3px;font:800 7px system-ui;color:#6a838d;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.v10-api-chip.live b{color:#14876c}.v10-api-chip.slow b{color:#b77716}.v10-api-chip.wait b{color:#8a6b7a}
+.v10-float-emoji{position:fixed;z-index:2;pointer-events:none;filter:drop-shadow(0 7px 16px rgba(49,91,108,.18));opacity:.62;animation:v10Float 5.5s ease-in-out infinite}.v10-float-emoji.e1{left:3vw;top:24vh}.v10-float-emoji.e2{right:4vw;top:34vh;animation-delay:-1.4s}.v10-float-emoji.e3{left:7vw;bottom:19vh;animation-delay:-2.8s}.v10-float-emoji.e4{right:8vw;bottom:26vh;animation-delay:-4s}@keyframes v10Float{0%,100%{transform:translate3d(0,0,0) rotate(-4deg)}50%{transform:translate3d(0,-12px,0) rotate(5deg)}}
+#v10-security-card{margin:12px 0;padding:13px 14px;border-radius:22px;background:linear-gradient(135deg,rgba(242,255,251,.86),rgba(241,247,255,.82));border:1px solid rgba(255,255,255,.96);box-shadow:0 12px 32px rgba(41,83,99,.11)}#v10-security-card b{display:block;color:#157961;font:1000 11px system-ui}#v10-security-card span{display:block;margin-top:4px;color:#5b7680;font:800 8px/1.5 system-ui}
+body.portal-game-mode.v9-embedded #v9-game-shell{background:#eaf7fa!important}body.portal-game-mode.v9-embedded #v9-game-status{background:rgba(250,254,255,.86)!important;border-color:#fff!important;color:#173f4c!important;box-shadow:0 12px 30px rgba(30,79,96,.16)!important}body.portal-game-mode.v9-embedded #robot{filter:drop-shadow(0 12px 26px rgba(23,89,105,.22))!important}
+@media(max-width:520px){#portal-games .ultra-game-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:9px!important}.portal-game-card{border-radius:24px!important;padding:8px!important}.ultra-card-image{height:172px!important;border-radius:18px!important}.portal-game-card h3,.ultra-card-copy h3{font-size:22px!important}.portal-game-card p{font-size:8.2px!important}.v5-engine-row{gap:4px!important}.v5-engine-row span{font-size:6.4px!important;padding:5px 6px!important}.portal-mode-row{gap:6px!important}.portal-mode-btn{min-height:48px!important;font-size:8.5px!important;border-radius:15px!important}.v10-api-grid{grid-template-columns:1fr 1fr}.v10-float-emoji{font-size:18px}}
+@media(prefers-reduced-motion:reduce){.portal-game-card::before,.v10-slogan-track,.v10-float-emoji{animation:none!important}}
+</style>
+
+<script id="v10-ui-security-runtime">
+(()=>{
+  const $=id=>document.getElementById(id);
+  function installDecor(){
+    const games=$('portal-games');
+    if(games&&!$('v10-slogan')){
+      const s=document.createElement('div');s.id='v10-slogan';s.innerHTML='<div class="v10-slogan-track">⚡ <b>TAIXIUTOOL V10</b> · 🎯 REALTIME MULTI-GAME · 🧠 ENSEMBLE + TỰ HỌC TỪ PHIÊN ĐÃ CHỐT · 🔐 <em>1 TÀI KHOẢN = 1 PHIÊN ĐĂNG NHẬP</em> · 🤖 ROBOT LUÔN ĐÈ TRÊN GAME · 💎 LIQUID GLASS · ⚡</div>';
+      const title=games.querySelector('.ultra-page-title');(title?.parentNode||games).insertBefore(s,title?.nextSibling||games.firstChild);
+    }
+    if(games&&!$('v10-api-panel')){
+      const p=document.createElement('div');p.id='v10-api-panel';p.innerHTML='<div class="v10-api-head"><b>⚙ API / ENGINE STATUS</b><span>REAL SESSION ONLY · NO FAKE ROUND</span></div><div class="v10-api-grid" id="v10-api-grid"><div class="v10-api-chip wait"><b>ĐANG ĐỒNG BỘ...</b><small>Đọc trạng thái nguồn</small></div></div>';
+      const grid=games.querySelector('.ultra-game-grid');games.insertBefore(p,grid||null);
+    }
+    const acc=$('portal-account');
+    if(acc&&!$('v10-security-card')){
+      const c=document.createElement('div');c.id='v10-security-card';c.innerHTML='<b>🔐 BẢO MẬT PHIÊN RIÊNG</b><span id="v10-security-copy">Token tài khoản được khóa theo thiết bị + trình duyệt. Đăng nhập mới sẽ thu hồi phiên cũ.</span>';
+      acc.querySelector('.account-pro-shell')?.insertBefore(c,acc.querySelector('.ultra-link-panel'));
+    }
+    if(!$('v10-emoji-layer')){
+      const e=document.createElement('div');e.id='v10-emoji-layer';e.innerHTML='<span class="v10-float-emoji e1">🤖</span><span class="v10-float-emoji e2">💎</span><span class="v10-float-emoji e3">⚡</span><span class="v10-float-emoji e4">🧠</span>';document.body.appendChild(e);
+    }
+  }
+  async function apiBoard(){
+    const box=$('v10-api-grid');if(!box)return;
+    const labels={hu:'LC79 HŨ',md5:'LC79 MD5',sunwin:'SUNWIN',max789_hu:'MAX789 HŨ',max789_md5:'MAX789 MD5'};
+    try{const r=await fetch(BACKEND+'/api/source-status',{cache:'no-store'}),d=await r.json(),src=d.sources||{};box.innerHTML=Object.entries(labels).map(([k,label])=>{const x=src[k]||{},raw=String(x.state||'waiting').toLowerCase(),cl=raw==='live'||raw==='online'?'live':raw==='slow'?'slow':'wait',sid=x.latest_sid||x.latest_session||'—',age=x.age_seconds==null?'đang chờ':x.age_seconds+'s';return `<div class="v10-api-chip ${cl}"><b>${cl==='live'?'●':'○'} ${label} · ${raw.toUpperCase()}</b><small>Phiên #${sid} · ${age} · engine V10</small></div>`}).join('')}catch(e){box.innerHTML='<div class="v10-api-chip wait"><b>○ API ĐANG KẾT NỐI LẠI</b><small>Không tạo phiên giả khi nguồn lỗi</small></div>'}
+  }
+  const oldRefresh=window.portalRefresh;
+  if(typeof oldRefresh==='function')window.portalRefresh=async function(){const r=await oldRefresh.apply(this,arguments);try{const sec=portalProfile?.security;if(sec&&$('v10-security-copy'))$('v10-security-copy').textContent=`1 phiên đăng nhập đang hoạt động · khóa thiết bị: ${sec.device_bound?'BẬT':'TẮT'} · phiên ${sec.session_hours||12}h · đăng nhập mới tự thu hồi phiên cũ.`}catch(_){}return r};
+  document.addEventListener('DOMContentLoaded',()=>{installDecor();apiBoard();setInterval(()=>{if(!document.hidden)apiBoard()},12000)});
+})();
+</script>\n</body>
 </html>
