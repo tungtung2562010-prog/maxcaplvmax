@@ -48,13 +48,14 @@ def plan_buttons():
     return rows
 
 def menu():
+    """Compact control center: common actions first, advanced actions remain available as commands."""
     return InlineKeyboardMarkup([
-      [InlineKeyboardButton("🏠 Tổng quan",callback_data="home"),InlineKeyboardButton("👤 Tài khoản",callback_data="accounts")],
-      [InlineKeyboardButton("💳 Nạp tiền",callback_data="deposits"),InlineKeyboardButton("🔔 LIVE",callback_data="live")],
-      [InlineKeyboardButton("🔑 Key",callback_data="list"),InlineKeyboardButton("💰 Gói key",callback_data="plans")],
-      [InlineKeyboardButton("🌐 Game / API",callback_data="gamelinks"),InlineKeyboardButton("📣 Thông báo",callback_data="notice")],
-      [InlineKeyboardButton("🎨 Giao diện",callback_data="ui"),InlineKeyboardButton("⚙️ Cấu hình",callback_data="settings")],
-      [InlineKeyboardButton("📊 Báo cáo 24H",callback_data="dailyreport"),InlineKeyboardButton("🔄 Làm mới",callback_data="home")],
+      [InlineKeyboardButton("🏠 Tổng quan",callback_data="home"),InlineKeyboardButton("👥 User",callback_data="accounts")],
+      [InlineKeyboardButton("💳 Nạp tiền",callback_data="deposits"),InlineKeyboardButton("🔑 Key",callback_data="list")],
+      [InlineKeyboardButton("🎮 Game / API",callback_data="gamelinks"),InlineKeyboardButton("🎨 Giao diện",callback_data="ui")],
+      [InlineKeyboardButton("💰 Gói key",callback_data="plans"),InlineKeyboardButton("📣 Thông báo",callback_data="notice")],
+      [InlineKeyboardButton("📊 Báo cáo",callback_data="dailyreport"),InlineKeyboardButton("⚙️ Cấu hình",callback_data="settings")],
+      [InlineKeyboardButton("🔄 Làm mới",callback_data="home")],
     ])
 
 async def render_panel(update:Update,text,reply_markup=None,parse_mode=None):
@@ -89,20 +90,14 @@ async def dashboard_text():
         s=await asyncio.to_thread(req,"GET","/api/admin/settings")
         cfg=s.get("settings",{})
         return (
-          "╭─ 🛡 TAIXIUTOOL ADMIN ─╮\n"
-          "│ 🟢 SERVER ONLINE   🔔 LIVE AUTO: ON\n"
-          "╰────────────────────────╯\n\n"
-          f"🔑 KEY     {d.get('active_keys',0)} hoạt động / {d.get('total_keys',0)} tổng\n"
-          f"📱 DEVICE  {d.get('devices',0)} đã kích hoạt\n"
-          f"✅ TODAY   {d.get('activations_today',0)} kích hoạt\n"
-          f"⚡ FREE    {d.get('free_today',0)} hoàn tất hôm nay\n\n"
-          f"📡 POLL    LC79 {cfg.get('lc79_poll_seconds','11')}s · SUNWIN {cfg.get('sunwin_poll_seconds','12')}s\n"
-          f"📜 HISTORY {cfg.get('history_limit','60')} phiên\n"
-          f"🕶 NỀN     {d.get('background_active',0)} lượt đang theo dõi\n"
-          f"👤 ACCOUNT {d.get('accounts_total',0)} tài khoản · 💳 {d.get('deposit_pending',0)} nạp chờ duyệt\n"
-          f"💰 WALLET  {fmt_money(d.get('wallet_total',0))} tổng số dư\n\n"
-          "🔔 Người mới truy cập + key kích hoạt mới được báo tự động.\n"
-          "AUTO luôn bật · không có nút tắt · chống trùng 24h."
+          "🛡 TAIXIUTOOL · CONTROL CENTER\n"
+          "🟢 Backend online · Auto notify ON\n\n"
+          f"👥 {d.get('accounts_total',0)} tài khoản   💳 {d.get('deposit_pending',0)} nạp chờ\n"
+          f"🔑 {d.get('active_keys',0)}/{d.get('total_keys',0)} key hoạt động   📱 {d.get('devices',0)} thiết bị\n"
+          f"💰 {fmt_money(d.get('wallet_total',0))} tổng số dư\n"
+          f"⚡ {d.get('free_today',0)} FREE hôm nay   ✅ {d.get('activations_today',0)} kích hoạt\n\n"
+          f"🎮 Poll: LC79 {cfg.get('lc79_poll_seconds','-')}s · SUN {cfg.get('sunwin_poll_seconds','-')}s · MAX {cfg.get('max789_poll_seconds','-')}s\n"
+          "Chọn nút bên dưới để điều khiển. /adminhelp để xem lệnh nhanh."
         )
     except Exception as e:
         return "🛡 TAIXIUTOOL ADMIN\n\n⚠️ Backend: "+str(e)
@@ -740,6 +735,23 @@ async def account_live_worker(app):
         except Exception:pass
         await asyncio.sleep(4)
 
+async def adminhelp_cmd(update:Update,ctx:ContextTypes.DEFAULT_TYPE):
+    if not allowed(update):return
+    txt=(
+      "🧭 LỆNH NHANH\n\n"
+      "👤 /user USERNAME · xem tài khoản\n"
+      "➕ /congtien USERNAME SOTIEN\n"
+      "➖ /trutien USERNAME SOTIEN\n"
+      "🔐 /resetpass USERNAME MATKHAUMOI\n"
+      "🚫 /enableuser USERNAME on|off\n"
+      "💳 /deposits · nạp đang chờ\n"
+      "🎮 /gamelinks · link game/API\n"
+      "🎨 /ui · giao diện\n"
+      "📊 /report48 · báo cáo 48H\n"
+      "⚙️ /allsettings · toàn bộ cấu hình"
+    )
+    await render_panel(update,txt)
+
 async def callbacks(update:Update,ctx:ContextTypes.DEFAULT_TYPE):
     q=update.callback_query
     if not allowed(update):return
@@ -959,6 +971,7 @@ def main():
     if not BOT_TOKEN or not ADMIN_ID:raise RuntimeError("Thiếu TELEGRAM_BOT_TOKEN hoặc TELEGRAM_ADMIN_ID")
     app=Application.builder().token(BOT_TOKEN).post_init(post_init).build()
     app.add_handler(CommandHandler("start",start))
+    app.add_handler(CommandHandler("adminhelp",adminhelp_cmd))
     app.add_handler(CommandHandler("newkey",cmd_new))
     app.add_handler(CommandHandler("keys",list_keys))
     app.add_handler(CommandHandler("key",key_detail))
