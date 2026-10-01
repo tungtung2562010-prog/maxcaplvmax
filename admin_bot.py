@@ -414,19 +414,25 @@ async def gamelinks(update:Update,ctx:ContextTypes.DEFAULT_TYPE):
     lc=s.get("lc79_game_url","https://play.lc79.bet/")
     sw=s.get("sunwin_game_url","https://sunwin.villas")
     mx=s.get("max789_game_url","https://play.max789a.vin/")
+    lchu=s.get("lc79_hu_api_url","") or "Chưa cấu hình"
+    lcmd5=s.get("lc79_md5_api_url","") or "Chưa cấu hình"
     api=s.get("sunwin_api_url","") or "Chưa cấu hình"
+    swh=s.get("sunwin_history_api_url","") or "Dùng chung SUNWIN API"
     mxhu=s.get("max789_hu_api_url","") or "Chưa cấu hình"
     mxmd5=s.get("max789_md5_api_url","") or "Chưa cấu hình"
     txt=("🌐 GAME / API CENTER\n\n"
          f"◆ LC79\n{lc}\n\n"
          f"👑 SUNWIN\n{sw}\n\n"
          f"🐉 MAX789\n{mx}\n\n"
+         f"🔌 LC79 HŨ API\n{lchu}\n\n"
+         f"🔌 LC79 MD5 API\n{lcmd5}\n\n"
          f"🔌 SUNWIN API\n{api}\n\n"
+         f"🔌 SUNWIN HISTORY\n{swh}\n\n"
          f"🐉 MAX789 HŨ API\n{mxhu}\n\n"
          f"🐉 MAX789 MD5 API\n{mxmd5}\n\n"
          "Đổi nhanh:\n"
          "/setgame lc79 URL\n/setgame sunwin URL\n/setgame max789 URL\n"
-         "/setapi sunwin URL\n/setapi max789_hu URL\n/setapi max789_md5 URL")
+         "/setapi lc79_hu URL\n/setapi lc79_md5 URL\n/setapi sunwin URL\n/setapi sunwin_history URL\n/setapi max789_hu URL\n/setapi max789_md5 URL")
     await render_panel(update,txt[:3900])
 
 async def setgame(update:Update,ctx:ContextTypes.DEFAULT_TYPE):
@@ -447,19 +453,24 @@ async def setgame(update:Update,ctx:ContextTypes.DEFAULT_TYPE):
 async def apiurls(update:Update,ctx:ContextTypes.DEFAULT_TYPE):
     if not allowed(update):return
     s=req("GET","/api/admin/settings").get("settings",{})
+    lchu=s.get("lc79_hu_api_url","")
+    lcmd5=s.get("lc79_md5_api_url","")
     u=s.get("sunwin_api_url","")
+    uh=s.get("sunwin_history_api_url","")
     hu=s.get("max789_hu_api_url","")
     md5=s.get("max789_md5_api_url","")
-    await update.message.reply_text("🔌 API TAIXIUTOOL\n\n👑 SUNWIN API\n"+(u or "Chưa cấu hình")+"\n\n🐉 MAX789 HŨ API\n"+(hu or "Chưa cấu hình")+"\n\n🐉 MAX789 MD5 API\n"+(md5 or "Chưa cấu hình")+"\n\nĐổi bằng /setapi sunwin|max789_hu|max789_md5 URL")
+    await update.message.reply_text("🔌 API TAIXIUTOOL\n\n◆ LC79 HŨ\n"+(lchu or "Chưa cấu hình")+"\n\n◆ LC79 MD5\n"+(lcmd5 or "Chưa cấu hình")+"\n\n👑 SUNWIN API\n"+(u or "Chưa cấu hình")+"\n\n👑 SUNWIN HISTORY\n"+(uh or "Dùng chung SUNWIN API")+"\n\n🐉 MAX789 HŨ API\n"+(hu or "Chưa cấu hình")+"\n\n🐉 MAX789 MD5 API\n"+(md5 or "Chưa cấu hình")+"\n\nĐổi bằng /setapi lc79_hu|lc79_md5|sunwin|sunwin_history|max789_hu|max789_md5 URL")
 
 async def setapi(update:Update,ctx:ContextTypes.DEFAULT_TYPE):
     if not allowed(update):return
     if len(ctx.args)<2:
-        await update.message.reply_text("Dùng: /setapi sunwin|max789_hu|max789_md5 URL");return
+        await update.message.reply_text("Dùng: /setapi lc79_hu|lc79_md5|sunwin|sunwin_history|max789_hu|max789_md5 URL");return
     target=ctx.args[0].lower()
-    key={"sunwin":"sunwin_api_url","max789_hu":"max789_hu_api_url","max789_md5":"max789_md5_api_url","maxhu":"max789_hu_api_url","maxmd5":"max789_md5_api_url"}.get(target)
+    key={"lc79_hu":"lc79_hu_api_url","lchu":"lc79_hu_api_url","lc79_md5":"lc79_md5_api_url","lcmd5":"lc79_md5_api_url",
+         "sunwin":"sunwin_api_url","sunwin_history":"sunwin_history_api_url","swhistory":"sunwin_history_api_url",
+         "max789_hu":"max789_hu_api_url","max789_md5":"max789_md5_api_url","maxhu":"max789_hu_api_url","maxmd5":"max789_md5_api_url"}.get(target)
     if not key:
-        await update.message.reply_text("API chỉ nhận: sunwin, max789_hu, max789_md5");return
+        await update.message.reply_text("API chỉ nhận: lc79_hu, lc79_md5, sunwin, sunwin_history, max789_hu, max789_md5");return
     url=clean_http_url(ctx.args[1])
     if not url:
         await update.message.reply_text("API URL không hợp lệ.");return
