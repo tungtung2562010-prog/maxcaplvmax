@@ -365,6 +365,9 @@ def current_auth():
     if not auth.startswith("Bearer "): return None
     p=verify_token(auth[7:])
     if not p:return None
+    if p.get('aid') is not None and p.get('dev'):
+        raw_device=str(request.headers.get('X-Device-ID') or '').strip()
+        if not raw_device or not hmac.compare_digest(str(p.get('dev')),device_hash(raw_device)):return None
     with db() as con:
         row=con.execute("SELECT * FROM keys WHERE id=? AND enabled=1",(p["kid"],)).fetchone()
     if not row:return None
@@ -2858,19 +2861,52 @@ def _core_ensemble(hist,candidates,mode=2,force=False):
     return final_side,conf,f"{diag['pattern']} · {diag['regime']} · {why}"
 
 
+def _v10_settled_calibration(table_name,result,force=False):
+    """Calibrate displayed confidence using only already-settled predictions.
+
+    This never sees the target of the current/open round. It can only lower
+    confidence or skip a weak signal after poor recent out-of-sample results.
+    """
+    side,conf,reason=result
+    if side not in ('T','X'):return result
+    try:
+        with db() as con:
+            rows=con.execute('''SELECT correct FROM global_history WHERE table_name=? AND actual IS NOT NULL AND correct IS NOT NULL ORDER BY id DESC LIMIT 80''',(table_name,)).fetchall()
+        vals=[int(r['correct']) for r in rows]
+    except Exception:
+        vals=[]
+    n=len(vals)
+    if n<12:return side,min(int(conf),78),str(reason or '')+' · V10 CAL:WARMUP'
+    recent=vals[:24];mid=vals[:48]
+    # Beta(6,6) shrinkage keeps small lucky samples from inflating confidence.
+    p24=(sum(recent)+6.0)/(len(recent)+12.0)
+    p48=(sum(mid)+8.0)/(len(mid)+16.0)
+    blended=.62*p24+.38*p48
+    cap=int(round(_v61_clamp(56+(blended-.5)*92,56,82)))
+    conf=min(int(conf),cap)
+    bad_run=0
+    for v in vals:
+        if v==0:bad_run+=1
+        else:break
+    if bad_run>=4:conf=min(conf,62)
+    if n>=24 and blended<.485 and not force:
+        return None,min(conf,61),str(reason or '')+' · V10 CAL:RECENT WEAK · BỎ QUA'
+    return side,conf,str(reason or '')+f' · V10 CAL:{int(round(blended*100))}%/{n}'
+
+
 def predict_lc79_core(seq,force=False,table_name='hu'):
     hist=_v61_seq_values(seq,cap=420)
-    return _core_ensemble(hist,_core_candidates('lc79',table_name),mode=setting_int('lc79_algo_mode',2,1,3),force=force)
+    return _v10_settled_calibration(table_name,_core_ensemble(hist,_core_candidates('lc79',table_name),mode=setting_int('lc79_algo_mode',2,1,3),force=force),force=force)
 
 
 def predict_sunwin_core(seq,force=False,table_name='sunwin'):
     hist=_v61_seq_values(seq,cap=420)
-    return _core_ensemble(hist,_core_candidates('sunwin',table_name),mode=setting_int('sunwin_algo_mode',2,1,3),force=force)
+    return _v10_settled_calibration(table_name,_core_ensemble(hist,_core_candidates('sunwin',table_name),mode=setting_int('sunwin_algo_mode',2,1,3),force=force),force=force)
 
 def predict_max789_core(seq,force=False,table_name='max789_hu'):
     # MAX789 HŨ/MD5 share the full engine but learn patterns in isolated tables.
     hist=_v61_seq_values(seq,cap=420)
-    return _core_ensemble(hist,_core_candidates('lc79',table_name),mode=setting_int('max789_algo_mode',3,1,3),force=force)
+    return _v10_settled_calibration(table_name,_core_ensemble(hist,_core_candidates('lc79',table_name),mode=setting_int('max789_algo_mode',3,1,3),force=force),force=force)
 
 
 def _prediction_payload(table):
@@ -2881,8 +2917,8 @@ def _prediction_payload(table):
         if not seq:raise RuntimeError(f"{row['name']} chưa trả lịch sử T/X có session ID thật")
         current_sid=find_sunwin_current_session(current_data)
         hist=_v61_seq_values(seq,cap=420)
-        side,conf,reason=_core_ensemble(hist,_core_candidates('lc79',table),mode=max(1,min(3,int(row.get('algo_mode') or 2))),force=False)
-        reason=(reason or '')+' · V69 ADAPTIVE'
+        side,conf,reason=_v10_settled_calibration(table,_core_ensemble(hist,_core_candidates('lc79',table),mode=max(1,min(3,int(row.get('algo_mode') or 2))),force=False),force=False)
+        reason=(reason or '')+' · V10 ADAPTIVE'
     elif table=='sunwin':
         current_data,hist_data=get_sunwin_upstream();seq=extract_sunwin_history(hist_data)
         if not seq:raise RuntimeError('SUNWIN chưa trả lịch sử có session ID thật')
@@ -3086,6 +3122,18 @@ def init_account_db():
           user_agent TEXT,
           PRIMARY KEY(account_id,device_hash)
         );
+        CREATE TABLE IF NOT EXISTS account_sessions(
+          session_id TEXT PRIMARY KEY,
+          account_id INTEGER NOT NULL,
+          device_hash TEXT NOT NULL,
+          ua_hash TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          last_seen TEXT NOT NULL,
+          expires_at TEXT NOT NULL,
+          revoked INTEGER NOT NULL DEFAULT 0,
+          ip_address TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_account_sessions_account ON account_sessions(account_id,revoked,expires_at);
         CREATE TABLE IF NOT EXISTS account_keys(
           account_id INTEGER NOT NULL,
           key_id INTEGER NOT NULL,
@@ -3176,16 +3224,47 @@ def _password_hash(password,salt_hex=None):
     out=hashlib.pbkdf2_hmac('sha256',password.encode('utf-8'),salt,210000)
     return out.hex(),salt.hex()
 
-def _account_token(uid):
-    return sign_token({'typ':'account','uid':int(uid),'exp':int(time.time())+30*24*3600})
+def _account_ua_hash(ua=None):
+    raw=(ua if ua is not None else request.headers.get('User-Agent','')) or ''
+    return hashlib.sha256(raw.encode('utf-8','ignore')).hexdigest()
+
+def _create_account_session(uid,device):
+    device=str(device or '').strip()
+    if not device: raise RuntimeError('Không nhận diện được thiết bị')
+    dh=device_hash(device);sid=secrets.token_urlsafe(28);now=datetime.now(timezone.utc)
+    hours=setting_int('account_session_hours',12,1,168);exp=now+timedelta(hours=hours)
+    ua_hash=_account_ua_hash();ip=client_ip()
+    with db() as con:
+        # Strict mode: one active browser session per account. Logging in again revokes the old one.
+        con.execute('UPDATE account_sessions SET revoked=1 WHERE account_id=? AND revoked=0',(int(uid),))
+        con.execute('''INSERT INTO account_sessions(session_id,account_id,device_hash,ua_hash,created_at,last_seen,expires_at,revoked,ip_address)
+                       VALUES(?,?,?,?,?,?,?,0,?)''',(sid,int(uid),dh,ua_hash,now.isoformat(),now.isoformat(),exp.isoformat(),ip))
+        # Opportunistic cleanup.
+        con.execute('DELETE FROM account_sessions WHERE expires_at<?',( (now-timedelta(days=7)).isoformat(), ))
+    token=sign_token({'typ':'account','uid':int(uid),'sid':sid,'dev':dh,'exp':int(exp.timestamp())})
+    return token,exp.isoformat()
 
 def _current_account():
     auth=request.headers.get('Authorization','')
     if not auth.startswith('Bearer '):return None
     p=verify_token(auth[7:])
-    if not p or p.get('typ')!='account' or not p.get('uid'):return None
+    if not p or p.get('typ')!='account' or not p.get('uid') or not p.get('sid') or not p.get('dev'):return None
+    raw_device=str(request.headers.get('X-Device-ID') or '').strip()
+    if not raw_device:return None
+    dh=device_hash(raw_device)
+    if not hmac.compare_digest(str(p.get('dev')),dh):return None
+    now=datetime.now(timezone.utc);ua_hash=_account_ua_hash()
     with db() as con:
+        sess=con.execute('''SELECT * FROM account_sessions WHERE session_id=? AND account_id=? AND revoked=0 AND expires_at>?''',
+                         (str(p['sid']),int(p['uid']),now.isoformat())).fetchone()
+        if not sess:return None
+        if not hmac.compare_digest(str(sess['device_hash']),dh):return None
+        # Bind the session to the browser family too. This blocks copied localStorage tokens on another browser.
+        if sess['ua_hash'] and not hmac.compare_digest(str(sess['ua_hash']),ua_hash):return None
+        con.execute('UPDATE account_sessions SET last_seen=?,ip_address=? WHERE session_id=?',(now.isoformat(),client_ip(),str(p['sid'])))
         row=con.execute('SELECT * FROM accounts WHERE id=? AND enabled=1',(int(p['uid']),)).fetchone()
+    if row:
+        request.account_session_id=str(p['sid']);request.account_device_hash=dh
     return row
 
 def require_account(fn):
@@ -3208,11 +3287,13 @@ def _account_profile(uid):
         a=con.execute('SELECT * FROM accounts WHERE id=?',(uid,)).fetchone()
         k=_active_account_key(con,uid)
         tx=con.execute('SELECT id,kind,amount,balance_after,note,created_at FROM wallet_transactions WHERE account_id=? ORDER BY id DESC LIMIT 12',(uid,)).fetchall()
+        active_sessions=con.execute('SELECT COUNT(*) c FROM account_sessions WHERE account_id=? AND revoked=0 AND expires_at>?',(uid,now_iso())).fetchone()['c']
     return {
       'id':a['id'],'username':a['username'],'email':(a['email'] or '' if 'email' in a.keys() else ''),'balance_vnd':int(a['balance_vnd'] or 0),
       'created_at':a['created_at'],'last_login_at':a['last_login_at'],'last_login_ip':a['last_login_ip'],
       'key':None if not k else {'id':k['id'],'label':k['label'],'expires_at':k['expires_at'],'days':k['days'],'max_devices':k['max_devices'],'hint':k['plain_hint'] or '','lifetime':('VĨNH VIỄN' in str(k['label']).upper())},
-      'wallet':[dict(x) for x in tx]
+      'wallet':[dict(x) for x in tx],
+      'security':{'strict_single_session':True,'active_sessions':int(active_sessions or 0),'device_bound':True,'session_hours':setting_int('account_session_hours',12,1,168)}
     }
 
 def _bind_key_device(k,device,ip,ua):
@@ -3283,16 +3364,17 @@ def account_register():
         cur=con.execute('INSERT INTO accounts(username,email,password_hash,password_salt,balance_vnd,created_at,signup_ip,signup_device_hash,last_login_at,last_login_ip,enabled) VALUES(?,?,?,?,0,?,?,?,?,?,1)',(username,email,ph,salt,now,ip,dh,now,ip));uid=cur.lastrowid
         con.execute('INSERT INTO account_devices(account_id,device_hash,first_seen,last_seen,ip_address,user_agent) VALUES(?,?,?,?,?,?)',(uid,dh,now,now,ip,ua))
     _account_event('account_registered',uid,username=username,email=email,ip=ip,device=dh[:12])
-    return jsonify({'ok':True,'token':_account_token(uid),'profile':_account_profile(uid)})
+    token,session_expires_at=_create_account_session(uid,device);return jsonify({'ok':True,'token':token,'session_expires_at':session_expires_at,'profile':_account_profile(uid)})
 
 @app.post('/api/account/login')
 def account_login():
     d=request.get_json(silent=True) or {};identity=str(d.get('username') or d.get('identity') or '').strip().lower();password=str(d.get('password') or '');device=str(d.get('device_id') or '').strip()
+    if not device:return jsonify({'detail':'Không nhận diện được thiết bị'}),400
     with db() as con:a=con.execute('SELECT * FROM accounts WHERE (username=? OR lower(email)=lower(?)) AND enabled=1',(identity,identity)).fetchone()
     if not a:return jsonify({'detail':'Sai tài khoản/email hoặc mật khẩu'}),401
     ph,_=_password_hash(password,a['password_salt'])
     if not hmac.compare_digest(ph,a['password_hash']):return jsonify({'detail':'Sai tài khoản/email hoặc mật khẩu'}),401
-    ip=client_ip();dh=device_hash(device or ('web-'+a['username']));ua=request.headers.get('User-Agent','')[:500];now=now_iso()
+    ip=client_ip();dh=device_hash(device);ua=request.headers.get('User-Agent','')[:500];now=now_iso()
     with db() as con:
         con.execute('UPDATE accounts SET last_login_at=?,last_login_ip=? WHERE id=?',(now,ip,a['id']))
         con.execute('INSERT INTO account_devices(account_id,device_hash,first_seen,last_seen,ip_address,user_agent) VALUES(?,?,?,?,?,?) ON CONFLICT(account_id,device_hash) DO UPDATE SET last_seen=excluded.last_seen,ip_address=excluded.ip_address,user_agent=excluded.user_agent',(a['id'],dh,now,now,ip,ua))
@@ -3301,7 +3383,7 @@ def account_login():
         if k:_register_background_watch(k['id'],dh,k['expires_at'])
     except Exception:pass
     _account_event('account_login',a['id'],username=a['username'],ip=ip,device=dh[:12])
-    return jsonify({'ok':True,'token':_account_token(a['id']),'profile':_account_profile(a['id'])})
+    token,session_expires_at=_create_account_session(a['id'],device);return jsonify({'ok':True,'token':token,'session_expires_at':session_expires_at,'profile':_account_profile(a['id'])})
 
 @app.post('/api/account/password-reset/request')
 def password_reset_request():
@@ -3341,7 +3423,7 @@ def password_reset_confirm():
             con.execute('UPDATE password_resets SET attempts=attempts+1 WHERE id=?',(r['id'],));return jsonify({'detail':'Mã xác minh không đúng'}),400
         ph,salt=_password_hash(password)
         con.execute('UPDATE accounts SET password_hash=?,password_salt=? WHERE id=?',(ph,salt,r['account_id']))
-        con.execute('UPDATE password_resets SET used_at=? WHERE id=?',(now.isoformat(),r['id']))
+        con.execute('UPDATE password_resets SET used_at=? WHERE id=?',(now.isoformat(),r['id']));con.execute('UPDATE account_sessions SET revoked=1 WHERE account_id=?',(r['account_id'],))
     _account_event('password_reset_done',r['account_id'])
     return jsonify({'ok':True,'message':'Đặt lại mật khẩu thành công. Bạn có thể đăng nhập ngay.'})
 
@@ -3349,6 +3431,15 @@ def password_reset_confirm():
 @require_account
 def account_me():
     return jsonify({'profile':_account_profile(request.account['id']),'announcement':get_setting('site_announcement','')})
+
+@app.post('/api/account/logout')
+@require_account
+def account_logout():
+    sid=getattr(request,'account_session_id','')
+    if sid:
+        with db() as con:con.execute('UPDATE account_sessions SET revoked=1 WHERE session_id=?',(sid,))
+    _account_event('account_logout',request.account['id'],device=getattr(request,'account_device_hash','')[:12])
+    return jsonify({'ok':True})
 
 @app.post('/api/account/link-key')
 @require_account
@@ -3379,7 +3470,7 @@ def account_game_session():
     try:dh=_bind_key_device(k,device,client_ip(),request.headers.get('User-Agent',''))
     except RuntimeError as e:return jsonify({'detail':str(e)}),403
     exp=min(int(datetime.fromisoformat(k['expires_at']).timestamp()),int(time.time())+SESSION_SECONDS)
-    token=sign_token({'kid':k['id'],'dh':dh,'exp':exp})
+    token=sign_token({'kid':k['id'],'aid':int(uid),'dev':dh,'dh':dh,'exp':exp})
     return jsonify({'ok':True,'token':token,'expires_at':k['expires_at'],'key_id':k['id']})
 
 @app.post('/api/account/deposits')
@@ -3867,6 +3958,10 @@ def public_config():
 def root(): return send_from_directory(BASE,"index.html")
 @app.get("/lc79-theme.mp3")
 def theme_audio(): return send_from_directory(BASE,"lc79-theme.mp3")
+
+@app.get('/assets/<path:name>')
+def portal_asset(name):
+    return send_from_directory(os.path.join(BASE,'assets'),name,max_age=86400)
 
 
 
