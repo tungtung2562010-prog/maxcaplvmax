@@ -223,6 +223,22 @@ def init_db():
           value TEXT NOT NULL,
           updated_at TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS custom_games(
+          slug TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          description TEXT DEFAULT '',
+          game_url TEXT NOT NULL,
+          image_url TEXT DEFAULT '',
+          api_url TEXT DEFAULT '',
+          history_api_url TEXT DEFAULT '',
+          algo_mode INTEGER NOT NULL DEFAULT 2,
+          poll_seconds INTEGER NOT NULL DEFAULT 4,
+          enabled INTEGER NOT NULL DEFAULT 1,
+          sort_order INTEGER NOT NULL DEFAULT 100,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_custom_games_enabled_sort ON custom_games(enabled,sort_order,name);
         CREATE TABLE IF NOT EXISTS background_watches(
           key_id INTEGER NOT NULL,
           device_hash TEXT NOT NULL,
@@ -2623,10 +2639,38 @@ def _online_pattern_signal(hist,table_name):
     return _v61_clamp(edge,-1,1),support
 
 
+def _v69_state_memory(hist):
+    """Joint context memory: recent sequence + run bucket + local change-rate.
+
+    It requires repeated historical analogs and recency decay, so one newest
+    result cannot become a strong signal on its own.
+    """
+    n=len(hist)
+    if n<28:return 0.0,0.0
+    def state_at(end):
+        if end<8:return None
+        h=hist[:end];ctx=''.join(h[-4:]);cur=h[-1];run=1
+        for j in range(len(h)-2,max(-1,len(h)-10),-1):
+            if h[j]==cur:run+=1
+            else:break
+        cr=_v61_change_rate(h,12);bucket=0 if cr<.34 else 2 if cr>.66 else 1
+        return (ctx,min(5,run),bucket)
+    target=state_at(n)
+    if not target:return 0.0,0.0
+    t=x=.9;support=0.0
+    for end in range(10,n):
+        if state_at(end)!=target:continue
+        nxt=hist[end];age=n-end;w=.5**(age/22.0)
+        if nxt=='T':t+=w
+        elif nxt=='X':x+=w
+        support+=w
+    if support<.34:return 0.0,support
+    return _v61_clamp((t-x)/(t+x),-1,1),min(2.0,support)
+
 def _core_candidates(game='lc79',table_name=None):
     c=_v61_lc79_candidates() if game=='lc79' else _v61_sunwin_candidates()
     c.pop('MOM',None);c['RHYTHM']=_v68_rhythm;c['SHAPE']=_v68_shape;c['BREAK']=_v68_break_transition
-    c['MOTIF']=_core_motif;c['RUNSIG']=_core_run_signature;c['ANALOG']=_core_knn_analog;c['PROFILE']=_core_context_profile;c['MULTI']=_core_multiscale;c['STATESTACK']=_core_state_consensus
+    c['MOTIF']=_core_motif;c['RUNSIG']=_core_run_signature;c['ANALOG']=_core_knn_analog;c['PROFILE']=_core_context_profile;c['MULTI']=_core_multiscale;c['STATESTACK']=_core_state_consensus;c['STATEV69']=_v69_state_memory
     if table_name:c['LEARNED']=lambda h:_online_pattern_signal(h,table_name)
     return c
 
@@ -2635,7 +2679,7 @@ def _core_family(name):
     if name.startswith('MK') or name=='VOM' or name.startswith('BAYES'):return 'CHUYỂN TIẾP'
     if name.startswith('CTX') or name in ('PAIR','MOTIF','PROFILE'):return 'NGỮ CẢNH'
     return {'RHYTHM':'NHỊP','SHAPE':'HÌNH THÁI','BREAK':'ĐIỂM GÃY','RUN':'BỆT',
-            'RUNSIG':'TRẠNG THÁI NHỊP','REGIME':'CHẾ ĐỘ','CYCLE':'CHU KỲ','ANALOG':'TƯƠNG ĐỒNG','MULTI':'ĐA KHUNG','STATESTACK':'ĐỒNG THUẬN','LEARNED':'TỰ HỌC'}.get(name,name)
+            'RUNSIG':'TRẠNG THÁI NHỊP','REGIME':'CHẾ ĐỘ','CYCLE':'CHU KỲ','ANALOG':'TƯƠNG ĐỒNG','MULTI':'ĐA KHUNG','STATESTACK':'ĐỒNG THUẬN','STATEV69':'BỘ NHỚ TRẠNG THÁI','LEARNED':'TỰ HỌC'}.get(name,name)
 
 
 def _core_structural_anchor(hist,candidates):
@@ -2830,7 +2874,16 @@ def predict_max789_core(seq,force=False,table_name='max789_hu'):
 
 
 def _prediction_payload(table):
-    if table=='sunwin':
+    if str(table).startswith('custom__'):
+        row=_custom_game_by_slug(_custom_slug_from_table(table),enabled_only=True)
+        if not row:raise RuntimeError('Game tùy chỉnh không tồn tại hoặc đang tắt')
+        current_data,hist_data=get_custom_upstream(table);seq=extract_any_history(hist_data)
+        if not seq:raise RuntimeError(f"{row['name']} chưa trả lịch sử T/X có session ID thật")
+        current_sid=find_sunwin_current_session(current_data)
+        hist=_v61_seq_values(seq,cap=420)
+        side,conf,reason=_core_ensemble(hist,_core_candidates('lc79',table),mode=max(1,min(3,int(row.get('algo_mode') or 2))),force=False)
+        reason=(reason or '')+' · V69 ADAPTIVE'
+    elif table=='sunwin':
         current_data,hist_data=get_sunwin_upstream();seq=extract_sunwin_history(hist_data)
         if not seq:raise RuntimeError('SUNWIN chưa trả lịch sử có session ID thật')
         current_sid=find_sunwin_current_session(current_data);side,conf,reason=predict_sunwin_core(seq,table_name=table)
@@ -2879,7 +2932,10 @@ def _store_for_key(kid,table,seq,actual_map,next_sid,side,conf,reason):
         if existing is not None:return existing['side'],int(existing['confidence'] or 50),existing['reason'] or reason
         final_side,final_conf,final_reason=side,conf,reason
         if final_side is None:
-            mode=(setting_int('sunwin_algo_mode',2,1,3) if table=='sunwin' else setting_int('max789_algo_mode',3,1,3) if table.startswith('max789_') else setting_int('lc79_algo_mode',2,1,3))
+            if table.startswith('custom__'):
+                _cg=_custom_game_by_slug(_custom_slug_from_table(table),enabled_only=True);mode=max(1,min(3,int((_cg or {}).get('algo_mode') or 2)))
+            else:
+                mode=(setting_int('sunwin_algo_mode',2,1,3) if table=='sunwin' else setting_int('max789_algo_mode',3,1,3) if table.startswith('max789_') else setting_int('lc79_algo_mode',2,1,3))
             if mode==3:
                 recent=con.execute('SELECT side FROM history WHERE key_id=? AND table_name=? ORDER BY id DESC LIMIT 8',(kid,table)).fetchall()
                 consecutive_skips=0
@@ -2889,6 +2945,9 @@ def _store_for_key(kid,table,seq,actual_map,next_sid,side,conf,reason):
                 if consecutive_skips>=4:
                     if table=='sunwin':cand_side,cand_conf,cand_reason=predict_sunwin_core(seq,force=True,table_name=table)
                     elif table in ('max789_hu','max789_md5'):cand_side,cand_conf,cand_reason=predict_max789_core(seq,force=True,table_name=table)
+                    elif table.startswith('custom__'):
+                        _cg=_custom_game_by_slug(_custom_slug_from_table(table),enabled_only=True)
+                        cand_side,cand_conf,cand_reason=_core_ensemble(_v61_seq_values(seq,cap=420),_core_candidates('lc79',table),mode=max(1,min(3,int((_cg or {}).get('algo_mode') or 2))),force=True)
                     else:cand_side,cand_conf,cand_reason=predict_lc79_core(seq,force=True,table_name=table)
                     # Coverage fallback is intentionally labelled/capped; it is not promoted to a strong signal.
                     if cand_side in ('T','X') and int(cand_conf or 0)>=53:
@@ -2974,13 +3033,18 @@ def _background_loop():
                 kids=_active_background_keys()
                 now=time.time()
                 # Global collection runs 24/7, even with zero active browser/key watches.
-                for table in ('hu','md5','sunwin','max789_hu','max789_md5'):
+                for table in _all_prediction_tables():
+                    due.setdefault(table,0.0)
                     if now<due[table]:
                         continue
                     _background_table(table,kids)
-                    sec=(setting_int('sunwin_poll_seconds',4,2,60) if table=='sunwin' else
-                         setting_int('max789_poll_seconds',3,2,60) if table.startswith('max789_') else
-                         setting_int('lc79_poll_seconds',3,2,60))
+                    if table.startswith('custom__'):
+                        _cg=_custom_game_by_slug(_custom_slug_from_table(table),enabled_only=True)
+                        sec=max(2,min(60,int((_cg or {}).get('poll_seconds') or 4)))
+                    else:
+                        sec=(setting_int('sunwin_poll_seconds',4,2,60) if table=='sunwin' else
+                             setting_int('max789_poll_seconds',3,2,60) if table.startswith('max789_') else
+                             setting_int('lc79_poll_seconds',3,2,60))
                     due[table]=time.time()+sec
         except Exception:
             pass
@@ -3579,6 +3643,77 @@ def admin_portal_settings():
     return jsonify({'ok':True,'changed':changed})
 
 # =============================================================
+# DYNAMIC GAME CATALOG — admin-extensible T/X sources
+# =============================================================
+_CUSTOM_GAME_CACHE={}
+
+def _game_slug(raw):
+    slug=re.sub(r'[^a-z0-9_-]+','-',str(raw or '').strip().lower()).strip('-_')
+    return slug[:40]
+
+def _custom_table(slug):
+    return "custom__"+_game_slug(slug)
+
+def _custom_slug_from_table(table):
+    t=str(table or '')
+    return t[len("custom__"):] if t.startswith("custom__") else ""
+
+def _custom_games_rows(enabled_only=False):
+    q="SELECT * FROM custom_games"
+    if enabled_only:q+=" WHERE enabled=1"
+    q+=" ORDER BY sort_order ASC,name COLLATE NOCASE ASC"
+    with db() as con:rows=con.execute(q).fetchall()
+    return [dict(r) for r in rows]
+
+def _custom_game_by_slug(slug, enabled_only=False):
+    slug=_game_slug(slug)
+    q="SELECT * FROM custom_games WHERE slug=?"+(" AND enabled=1" if enabled_only else "")
+    with db() as con:r=con.execute(q,(slug,)).fetchone()
+    return dict(r) if r else None
+
+def _custom_game_public(row):
+    return {
+      "slug":row["slug"],"name":row["name"],"description":row.get("description") or "",
+      "game_url":row["game_url"],"image_url":row.get("image_url") or "",
+      "enabled":bool(row.get("enabled",1)),"ready":bool((row.get("api_url") or "").strip()),
+      "algo_mode":int(row.get("algo_mode") or 2),"poll_seconds":int(row.get("poll_seconds") or 4),
+      "table":_custom_table(row["slug"])
+    }
+
+def _custom_api_url(table):
+    slug=_custom_slug_from_table(table)
+    row=_custom_game_by_slug(slug,enabled_only=True) if slug else None
+    return row,(row.get("api_url") or "").strip() if row else ""
+
+def get_custom_upstream(table):
+    row,url=_custom_api_url(table)
+    if not row:raise RuntimeError("Game tùy chỉnh không tồn tại hoặc đang tắt")
+    if not url:raise RuntimeError(f"{row['name']} chưa cấu hình API")
+    slot=_CUSTOM_GAME_CACHE.setdefault(table,{"ts":0.0,"data":None})
+    lock=_UPSTREAM_LOCKS.setdefault(table,threading.Lock())
+    with lock:
+        current=_fetch_json_source(url,table,slot,f"TAIXIUTOOL-CUSTOM/{row['slug']}/1.0")
+        hist_url=(row.get('history_api_url') or '').strip()
+        if hist_url and hist_url!=url:
+            hslot=_CUSTOM_GAME_CACHE.setdefault(table+'__history',{"ts":0.0,"data":None})
+            history=_fetch_json_source(hist_url,table,hslot,f"TAIXIUTOOL-CUSTOM-HISTORY/{row['slug']}/1.0")
+        else:history=current
+        return current,history
+
+def _custom_table_exists(table, enabled_only=False):
+    slug=_custom_slug_from_table(table)
+    return bool(slug and _custom_game_by_slug(slug,enabled_only=enabled_only))
+
+def _is_allowed_history_table(table):
+    return table in ("hu","md5","sunwin","max789_hu","max789_md5") or _custom_table_exists(table,False)
+
+def _all_prediction_tables():
+    out=["hu","md5","sunwin","max789_hu","max789_md5"]
+    for row in _custom_games_rows(enabled_only=True):
+        if (row.get("api_url") or "").strip():out.append(_custom_table(row["slug"]))
+    return out
+
+# =============================================================
 # ROUTES
 # =============================================================
 @app.get("/api/game-config")
@@ -3592,8 +3727,86 @@ def game_config():
       "sunwin_enabled":setting_bool("sunwin_enabled",True) and bool(get_setting("sunwin_api_url",SUNWIN_API).strip()),
       "sunwin_history_ready":bool((get_setting("sunwin_history_api_url","").strip() or get_setting("sunwin_api_url",SUNWIN_API).strip())),
       "max789_game_url":get_setting("max789_game_url",MAX789_GAME_URL),
-      "max789_enabled":setting_bool("max789_enabled",True) and bool(get_setting("max789_hu_api_url",MAX789_HU_API).strip() and get_setting("max789_md5_api_url",MAX789_MD5_API).strip())
+      "max789_enabled":setting_bool("max789_enabled",True) and bool(get_setting("max789_hu_api_url",MAX789_HU_API).strip() and get_setting("max789_md5_api_url",MAX789_MD5_API).strip()),
+      "custom_games":[_custom_game_public(x) for x in _custom_games_rows(enabled_only=True)]
     })
+
+@app.get("/api/admin/games")
+@require_admin
+def admin_games_catalog():
+    return jsonify({"games":[_custom_game_public(x)|{
+      "api_url":x.get("api_url") or "","history_api_url":x.get("history_api_url") or "",
+      "sort_order":int(x.get("sort_order") or 100)
+    } for x in _custom_games_rows(False)]})
+
+def _valid_http(v, optional=False):
+    v=str(v or "").strip()
+    if optional and not v:return ""
+    if not re.match(r"^https?://[^\s]+$",v,re.I):raise ValueError("URL phải bắt đầu bằng http:// hoặc https://")
+    return v[:700]
+
+@app.post("/api/admin/games")
+@require_admin
+def admin_add_game():
+    d=request.get_json(silent=True) or {}
+    slug=_game_slug(d.get("slug"))
+    name=str(d.get("name") or "").strip()[:60]
+    if not slug or len(slug)<2:return jsonify({"detail":"Slug game không hợp lệ"}),400
+    if not name:return jsonify({"detail":"Thiếu tên game"}),400
+    try:
+        game_url=_valid_http(d.get("game_url"))
+        image_url=_valid_http(d.get("image_url"),True)
+        api_url=_valid_http(d.get("api_url"),True)
+        history_url=_valid_http(d.get("history_api_url"),True)
+        algo=max(1,min(3,int(d.get("algo_mode",2))))
+        poll=max(2,min(60,int(d.get("poll_seconds",4))))
+        order=max(1,min(999,int(d.get("sort_order",100))))
+    except (ValueError,TypeError) as e:return jsonify({"detail":str(e)}),400
+    stamp=now_iso()
+    try:
+        with db() as con:
+            con.execute("""INSERT INTO custom_games(slug,name,description,game_url,image_url,api_url,history_api_url,algo_mode,poll_seconds,enabled,sort_order,created_at,updated_at)
+                           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                        (slug,name,str(d.get("description") or "")[:160],game_url,image_url,api_url,history_url,algo,poll,1 if d.get("enabled",True) else 0,order,stamp,stamp))
+    except sqlite3.IntegrityError:return jsonify({"detail":"Slug game đã tồn tại"}),409
+    return jsonify({"ok":True,"game":_custom_game_public(_custom_game_by_slug(slug))})
+
+@app.patch("/api/admin/games/<slug>")
+@require_admin
+def admin_edit_game(slug):
+    row=_custom_game_by_slug(slug)
+    if not row:return jsonify({"detail":"Không tìm thấy game"}),404
+    d=request.get_json(silent=True) or {};updates={}
+    try:
+        if "name" in d:updates["name"]=str(d["name"]).strip()[:60]
+        if "description" in d:updates["description"]=str(d["description"]).strip()[:160]
+        if "game_url" in d:updates["game_url"]=_valid_http(d["game_url"])
+        if "image_url" in d:updates["image_url"]=_valid_http(d["image_url"],True)
+        if "api_url" in d:updates["api_url"]=_valid_http(d["api_url"],True)
+        if "history_api_url" in d:updates["history_api_url"]=_valid_http(d["history_api_url"],True)
+        if "algo_mode" in d:updates["algo_mode"]=max(1,min(3,int(d["algo_mode"])))
+        if "poll_seconds" in d:updates["poll_seconds"]=max(2,min(60,int(d["poll_seconds"])))
+        if "enabled" in d:updates["enabled"]=1 if bool(d["enabled"]) else 0
+        if "sort_order" in d:updates["sort_order"]=max(1,min(999,int(d["sort_order"])))
+    except (ValueError,TypeError) as e:return jsonify({"detail":str(e)}),400
+    if not updates:return jsonify({"ok":True,"game":_custom_game_public(row)})
+    updates["updated_at"]=now_iso()
+    sql="UPDATE custom_games SET "+",".join(f"{k}=?" for k in updates)+" WHERE slug=?"
+    with db() as con:con.execute(sql,tuple(updates.values())+(_game_slug(slug),))
+    _CUSTOM_GAME_CACHE.pop(_custom_table(slug),None)
+    return jsonify({"ok":True,"game":_custom_game_public(_custom_game_by_slug(slug))})
+
+@app.delete("/api/admin/games/<slug>")
+@require_admin
+def admin_delete_game(slug):
+    row=_custom_game_by_slug(slug)
+    if not row:return jsonify({"detail":"Không tìm thấy game"}),404
+    table=_custom_table(slug)
+    with db() as con:
+        con.execute("DELETE FROM custom_games WHERE slug=?",(_game_slug(slug),))
+        con.execute("DELETE FROM learned_patterns WHERE table_name=?",(table,))
+    _CUSTOM_GAME_CACHE.pop(table,None);_SOURCE_STATE.pop(table,None);_SOURCE_ERRORS.pop(table,None)
+    return jsonify({"ok":True,"deleted":_game_slug(slug)})
 
 @app.get("/api/config")
 def public_config():
@@ -4155,13 +4368,14 @@ def clear_device_location():
 @app.post("/api/predict/<table>")
 @require_auth
 def predict(table):
-    if table not in ('hu','md5','sunwin','max789_hu','max789_md5'):
+    if table not in ('hu','md5','sunwin','max789_hu','max789_md5') and not _custom_table_exists(table,True):
         return jsonify({'detail':'Game/bàn không hợp lệ'}),400
     try:
         seq,actual_map,next_sid,side,conf,reason,diag=_prediction_payload(table)
         kid=request.auth_payload['kid']
         side,conf,reason=_store_for_key(kid,table,seq,actual_map,next_sid,side,conf,reason)
-        return jsonify({'ok':True,'table':table,'game':'sunwin' if table=='sunwin' else ('max789' if table.startswith('max789_') else 'lc79'),
+        game_name=('custom' if table.startswith('custom__') else ('sunwin' if table=='sunwin' else ('max789' if table.startswith('max789_') else 'lc79')))
+        return jsonify({'ok':True,'table':table,'game':game_name,
                         'session_id':next_sid,'side':side,'confidence':conf,'reason':reason,
                         'pattern':diag['pattern'],'regime':diag['regime'],'noise':diag['noise'],
                         'break_score':diag['break_score'],'clarity':diag['clarity'],
@@ -4176,7 +4390,7 @@ def predict(table):
 def source_status():
     out={}
     now=time.time()
-    for table in ('hu','md5','sunwin','max789_hu','max789_md5'):
+    for table in _all_prediction_tables():
         st=_SOURCE_STATE.get(table) or {}
         age=max(0,int(now-float(st.get('changed') or now))) if st.get('sid') else None
         last_success=int(max(0,now-float(st.get('last_success')))) if st.get('last_success') else None
@@ -4184,7 +4398,8 @@ def source_status():
                     bool(get_setting('lc79_md5_api_url',UPSTREAM_MD5).strip()) if table=='md5' else
                     bool(get_setting('sunwin_api_url',SUNWIN_API).strip()) if table=='sunwin' else
                     bool(get_setting('max789_hu_api_url',MAX789_HU_API).strip()) if table=='max789_hu' else
-                    bool(get_setting('max789_md5_api_url',MAX789_MD5_API).strip()))
+                    bool(get_setting('max789_md5_api_url',MAX789_MD5_API).strip()) if table=='max789_md5' else
+                    bool((_custom_api_url(table)[1] if table.startswith('custom__') else '')))
         out[table]={
           'configured':configured,'latest_sid':st.get('sid'),'age_seconds':age,'seen':bool(st.get('sid')),
           'last_success_ago_seconds':last_success,'error':_SOURCE_ERRORS.get(table) or '',
@@ -4198,8 +4413,7 @@ def history():
     kid=request.auth_payload["kid"]
     limit=min(200,max(1,int(request.args.get("limit",120))))
     table=(request.args.get("table") or "").strip()
-    allowed_tables=("hu","md5","sunwin","max789_hu","max789_md5")
-    if table and table not in allowed_tables:
+    if table and not _is_allowed_history_table(table):
         return jsonify({"detail":"Bàn không hợp lệ"}),400
     ttl_hours=max(1,min(168,setting_int("history_ttl_hours",24,1,168)))
     cutoff=(datetime.now(timezone.utc)-timedelta(hours=ttl_hours)).isoformat()
