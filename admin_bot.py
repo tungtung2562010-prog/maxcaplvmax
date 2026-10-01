@@ -52,7 +52,7 @@ def menu():
     return InlineKeyboardMarkup([
       [InlineKeyboardButton("🏠 Tổng quan",callback_data="home"),InlineKeyboardButton("👥 User",callback_data="accounts")],
       [InlineKeyboardButton("💳 Nạp tiền",callback_data="deposits"),InlineKeyboardButton("🔑 Key",callback_data="list")],
-      [InlineKeyboardButton("🎮 Game / API",callback_data="gamelinks"),InlineKeyboardButton("🎨 Giao diện",callback_data="ui")],
+      [InlineKeyboardButton("🎮 Game / AI",callback_data="gamelinks"),InlineKeyboardButton("🎨 Giao diện",callback_data="ui")],
       [InlineKeyboardButton("💰 Gói key",callback_data="plans"),InlineKeyboardButton("📣 Thông báo",callback_data="notice")],
       [InlineKeyboardButton("📊 Báo cáo",callback_data="dailyreport"),InlineKeyboardButton("⚙️ Cấu hình",callback_data="settings")],
       [InlineKeyboardButton("🔄 Làm mới",callback_data="home")],
@@ -433,7 +433,73 @@ async def gamelinks(update:Update,ctx:ContextTypes.DEFAULT_TYPE):
          "Đổi nhanh:\n"
          "/setgame lc79 URL\n/setgame sunwin URL\n/setgame max789 URL\n"
          "/setapi lc79_hu URL\n/setapi lc79_md5 URL\n/setapi sunwin URL\n/setapi sunwin_history URL\n/setapi max789_hu URL\n/setapi max789_md5 URL")
+    try:
+        cg=req("GET","/api/admin/games").get("games",[])
+        if cg:
+            txt+="\n\n🧩 GAME MỞ RỘNG\n"+"\n".join(f"• {x.get('name')} ({x.get('slug')}) · {'ON' if x.get('enabled') else 'OFF'} · AI {x.get('algo_mode',2)}" for x in cg[:15])
+        txt+="\n\nLệnh mở rộng: /games · /addgame · /editgame · /delgame"
+    except Exception:pass
     await render_panel(update,txt[:3900])
+
+async def custom_games_cmd(update:Update,ctx:ContextTypes.DEFAULT_TYPE):
+    if not allowed(update):return
+    rows=req("GET","/api/admin/games").get("games",[])
+    if not rows:
+        await render_panel(update,"🎮 GAME MỞ RỘNG\n\nChưa có game tùy chỉnh.\n\n/addgame slug | Tên | GAME_URL | IMAGE_URL | API_URL | ALGO")
+        return
+    lines=["🎮 GAME MỞ RỘNG · DYNAMIC CATALOG",""]
+    for x in rows[:30]:
+        lines.append(f"{'🟢' if x.get('enabled') else '⚪'} {x.get('name')} · {x.get('slug')}")
+        lines.append(f"   AI {x.get('algo_mode',2)} · poll {x.get('poll_seconds',4)}s · {'API READY' if x.get('ready') else 'CHƯA API'}")
+    lines += ["","Thêm: /addgame slug | Tên | GAME_URL | IMAGE_URL | API_URL | ALGO",
+              "Sửa: /editgame slug field value","Xóa: /delgame slug"]
+    await render_panel(update,"\n".join(lines)[:3900])
+
+def _pipe_args(update):
+    raw=(update.message.text or "").split(" ",1)
+    return [x.strip() for x in (raw[1] if len(raw)>1 else "").split("|")]
+
+async def addgame_cmd(update:Update,ctx:ContextTypes.DEFAULT_TYPE):
+    if not allowed(update):return
+    parts=_pipe_args(update)
+    if len(parts)<3 or not parts[0] or not parts[1] or not parts[2]:
+        await update.message.reply_text("Dùng:\n/addgame slug | Tên Game | GAME_URL | IMAGE_URL | API_URL | ALGO\n\nIMAGE_URL/API_URL có thể để - · ALGO 1/2/3")
+        return
+    slug,name,game_url=parts[:3]
+    image_url=parts[3] if len(parts)>3 and parts[3] not in ('','-') else ''
+    api_url=parts[4] if len(parts)>4 and parts[4] not in ('','-') else ''
+    try:algo=max(1,min(3,int(parts[5]))) if len(parts)>5 and parts[5] else 2
+    except Exception:algo=2
+    payload={"slug":slug,"name":name,"game_url":clean_http_url(game_url) or game_url,
+             "image_url":clean_http_url(image_url) if image_url else '',"api_url":clean_http_url(api_url) if api_url else '',"algo_mode":algo}
+    d=req("POST","/api/admin/games",json=payload);g=d.get('game',{})
+    await update.message.reply_text(f"✅ ĐÃ THÊM GAME\n{g.get('name')} · {g.get('slug')}\nAI mode {g.get('algo_mode')} · {'API READY' if g.get('ready') else 'chưa có API'}\n\nWeb sẽ tự hiện card game sau khi reload.")
+
+async def editgame_cmd(update:Update,ctx:ContextTypes.DEFAULT_TYPE):
+    if not allowed(update):return
+    if len(ctx.args)<3:
+        await update.message.reply_text("Dùng: /editgame SLUG FIELD VALUE\nFIELD: name game image api history desc algo poll on order")
+        return
+    slug=ctx.args[0].strip().lower();field=ctx.args[1].strip().lower();value=" ".join(ctx.args[2:]).strip()
+    key={"name":"name","game":"game_url","image":"image_url","api":"api_url","history":"history_api_url","desc":"description","algo":"algo_mode","poll":"poll_seconds","on":"enabled","order":"sort_order"}.get(field)
+    if not key:
+        await update.message.reply_text("FIELD: name game image api history desc algo poll on order");return
+    if key in ('game_url','image_url','api_url','history_api_url'):
+        if value in ('-','off','none') and key!='game_url':value=''
+        elif not clean_http_url(value):await update.message.reply_text("URL không hợp lệ.");return
+        else:value=clean_http_url(value)
+    elif key in ('algo_mode','poll_seconds','sort_order'):
+        try:value=int(value)
+        except Exception:await update.message.reply_text("Giá trị phải là số.");return
+    elif key=='enabled':value=value.lower() in ('1','on','true','yes','bat','bật')
+    d=req("PATCH",f"/api/admin/games/{slug}",json={key:value});g=d.get('game',{})
+    await update.message.reply_text(f"✅ Đã sửa {g.get('name',slug)} · {field} = {value}")
+
+async def delgame_cmd(update:Update,ctx:ContextTypes.DEFAULT_TYPE):
+    if not allowed(update):return
+    if not ctx.args:await update.message.reply_text("Dùng: /delgame SLUG");return
+    slug=ctx.args[0].strip().lower();req("DELETE",f"/api/admin/games/{slug}")
+    await update.message.reply_text(f"✅ Đã xóa game {slug}. Dữ liệu tự học riêng của game cũng đã dọn.")
 
 async def setgame(update:Update,ctx:ContextTypes.DEFAULT_TYPE):
     if not allowed(update):return
@@ -757,6 +823,10 @@ async def adminhelp_cmd(update:Update,ctx:ContextTypes.DEFAULT_TYPE):
       "🚫 /enableuser USERNAME on|off\n"
       "💳 /deposits · nạp đang chờ\n"
       "🎮 /gamelinks · link game/API\n"
+      "🧩 /games · game mở rộng\n"
+      "➕ /addgame · thêm game + ảnh + link + API + AI\n"
+      "🟢 /gameon · bật game | ⏸ /gameoff · tắt game\n"
+      "✏️ /editgame · sửa game / AI / poll\n"
       "🎨 /ui · giao diện\n"
       "📊 /report48 · báo cáo 48H\n"
       "⚙️ /allsettings · toàn bộ cấu hình"
@@ -997,6 +1067,12 @@ def main():
     app.add_handler(CommandHandler("free",free_stats))
     app.add_handler(CommandHandler("settings",settings_cmd))
     app.add_handler(CommandHandler("gamelinks",gamelinks))
+    app.add_handler(CommandHandler("games",custom_games_cmd))
+    app.add_handler(CommandHandler("addgame",addgame_cmd))
+    app.add_handler(CommandHandler("editgame",editgame_cmd))
+    app.add_handler(CommandHandler("delgame",delgame_cmd))
+    app.add_handler(CommandHandler("gameon",gameon_cmd))
+    app.add_handler(CommandHandler("gameoff",gameoff_cmd))
     app.add_handler(CommandHandler("setgame",setgame))
     app.add_handler(CommandHandler("apiurls",apiurls))
     app.add_handler(CommandHandler("setapi",setapi))
