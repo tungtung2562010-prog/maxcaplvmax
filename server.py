@@ -3372,7 +3372,10 @@ def account_game_session():
     d=request.get_json(silent=True) or {};device=str(d.get('device_id') or '').strip();uid=request.account['id']
     if not device:return jsonify({'detail':'Không nhận diện được thiết bị'}),400
     with db() as con:k=_active_account_key(con,uid)
-    if not k:return jsonify({'detail':'Tài khoản chưa có key còn hạn. Hãy mua hoặc liên kết key.'}),403
+    if not k:
+        if str(request.args.get('allow_guest') or '').strip().lower() in ('1','true','yes','on'):
+            return jsonify({'ok':True,'guest':True,'token':None,'expires_at':None,'reason':'no_active_key'})
+        return jsonify({'detail':'Tài khoản chưa có key còn hạn. Hãy mua hoặc liên kết key.'}),403
     try:dh=_bind_key_device(k,device,client_ip(),request.headers.get('User-Agent',''))
     except RuntimeError as e:return jsonify({'detail':str(e)}),403
     exp=min(int(datetime.fromisoformat(k['expires_at']).timestamp()),int(time.time())+SESSION_SECONDS)
@@ -3728,6 +3731,7 @@ def game_config():
       "sunwin_history_ready":bool((get_setting("sunwin_history_api_url","").strip() or get_setting("sunwin_api_url",SUNWIN_API).strip())),
       "max789_game_url":get_setting("max789_game_url",MAX789_GAME_URL),
       "max789_enabled":setting_bool("max789_enabled",True) and bool(get_setting("max789_hu_api_url",MAX789_HU_API).strip() and get_setting("max789_md5_api_url",MAX789_MD5_API).strip()),
+      "game_open_mode":get_setting("game_open_mode","auto"),
       "custom_games":[_custom_game_public(x) for x in _custom_games_rows(enabled_only=True)]
     })
 
