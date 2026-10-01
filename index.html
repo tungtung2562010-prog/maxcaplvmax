@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>TAIXIUTOOL</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1882,6 +1882,7 @@ body.portal-game-mode #game-back-btn{background:rgba(240,252,255,.68)!important;
 @media(prefers-reduced-motion:reduce){.portal-page,.portal-game-card{animation:none!important;transition:none!important}}
 </style>
 
+
 </head>
 <body>
 <div id="vip-loader" aria-hidden="true"><div class="vip-load-box"><div class="vip-load-core"><i></i></div><div class="vip-load-title" id="vip-load-title">ĐANG ĐỒNG BỘ</div><div class="vip-load-sub" id="vip-load-sub">Chuẩn bị dữ liệu và giao diện...</div><div class="vip-load-track"><b></b></div></div></div>
@@ -2226,6 +2227,7 @@ body.portal-game-mode #game-back-btn{background:rgba(240,252,255,.68)!important;
   <a id="portal-telegram" class="portal-telegram ultra-telegram" href="https://t.me/huanhoahong11111" target="_blank" rel="noopener" title="Hỗ trợ / báo lỗi">✈</a>
 </div>
 <button id="game-back-btn" class="ultra-game-back" type="button">← QUAY LẠI</button>
+<button id="game-direct-open" type="button" aria-label="Mở game trực tiếp">MỞ GAME ↗</button>
 <div id="portal-notice-modal" class="notice-modal" aria-hidden="true">
   <div class="notice-card">
     <div class="notice-head"><div class="notice-bell">♧</div><div id="notice-title" class="notice-title">Thông báo</div><div class="notice-brand">TAIXIUTOOL</div></div>
@@ -2296,6 +2298,38 @@ async function loadRuntimeConfig(){
   const kl=document.getElementById("f48-key-label");if(kl)kl.textContent=`FREE KEY · ${appConfig.free_key_hours} GIỜ`;
   applyRuntimeAppearance();
 }
+function normalizedGameUrl(u){
+  try{
+    const x=new URL(String(u||""),location.href);
+    if(x.protocol==="about:")return x.href;
+    x.hash="";
+    return x.href.replace(/\/$/,"");
+  }catch(_){return String(u||"").trim().replace(/\/$/,"")}
+}
+function setGameFrameSource(frame,target,force=false){
+  if(!frame||!target)return false;
+  const wanted=normalizedGameUrl(target);
+  const raw=frame.getAttribute("src")||frame.src||"";
+  const current=normalizedGameUrl(raw);
+  frame.dataset.src=target;
+  // Safari normalises https://host to https://host/. Comparing raw strings made
+  // the iframe reload on every poll/config refresh and could leave a black page.
+  if(force||!current||current==="about:blank"||current!==wanted){
+    frame.src=target;
+    frame.dataset.loadedTarget=wanted;
+    return true;
+  }
+  frame.dataset.loadedTarget=wanted;
+  return false;
+}
+function syncGameDirectOpen(){
+  const b=document.getElementById("game-direct-open");if(!b)return;
+  let url="",label="MỞ GAME";
+  if(currentGame==="sunwin"){url=gameConfig.sunwin_game_url||"https://sunwin.villas";label="MỞ SUNWIN ↗"}
+  else if(currentGame==="max789"){url=gameConfig.max789_game_url||"https://play.max789a.vin/";label="MỞ MAX789 ↗"}
+  else{url=gameConfig.lc79_game_url||"https://play.lc79.bet/";label="MỞ LC79 ↗"}
+  b.dataset.url=url;b.textContent=label;
+}
 async function loadGameConfig(){
   const oldLc=gameConfig.lc79_game_url||"";
   const oldSw=gameConfig.sunwin_game_url||"";
@@ -2314,9 +2348,10 @@ async function loadGameConfig(){
   const gameStates={lc79:gameConfig.lc79_enabled!==false,sunwin:gameConfig.sunwin_enabled!==false,max789:gameConfig.max789_enabled!==false};
   document.querySelectorAll('.portal-game-card').forEach(card=>{const b=card.querySelector('[data-enter-game]');const g=b?.dataset.enterGame||'';card.classList.toggle('is-disabled',g && gameStates[g]===false)});
   const toolOn=document.getElementById("robot")?.style.display!=="none";
-  if(toolOn&&currentGame==="lc79"&&oldLc&&oldLc!==gameConfig.lc79_game_url&&f)f.src=gameConfig.lc79_game_url;
-  if(toolOn&&currentGame==="sunwin"&&oldSw&&oldSw!==gameConfig.sunwin_game_url&&swFrame)swFrame.src=gameConfig.sunwin_game_url;
-  if(toolOn&&currentGame==="max789"&&oldMax&&oldMax!==gameConfig.max789_game_url&&mxFrame)mxFrame.src=gameConfig.max789_game_url;
+  if(toolOn&&currentGame==="lc79"&&oldLc&&normalizedGameUrl(oldLc)!==normalizedGameUrl(gameConfig.lc79_game_url)&&f)setGameFrameSource(f,gameConfig.lc79_game_url,true);
+  if(toolOn&&currentGame==="sunwin"&&oldSw&&normalizedGameUrl(oldSw)!==normalizedGameUrl(gameConfig.sunwin_game_url)&&swFrame)setGameFrameSource(swFrame,gameConfig.sunwin_game_url,true);
+  if(toolOn&&currentGame==="max789"&&oldMax&&normalizedGameUrl(oldMax)!==normalizedGameUrl(gameConfig.max789_game_url)&&mxFrame)setGameFrameSource(mxFrame,gameConfig.max789_game_url,true);
+  syncGameDirectOpen();
 }
 function tableName(t){
   if(t==="sunwin")return "SUNWIN";
@@ -2333,13 +2368,15 @@ function applyGameStage(){
   if(mx){mx.classList.remove("on");mx.setAttribute("aria-hidden","true")}
   if(currentGame==="sunwin"){
     if(sw){sw.classList.toggle("on",toolOn);sw.setAttribute("aria-hidden",toolOn?"false":"true")}
-    if(swFrame&&toolOn){const target=gameConfig.sunwin_game_url||swFrame.dataset.src||"https://sunwin.villas";swFrame.dataset.src=target;if(!swFrame.src||swFrame.src.endsWith("about:blank")||swFrame.src!==target)swFrame.src=target}
+    if(swFrame&&toolOn){const target=gameConfig.sunwin_game_url||swFrame.dataset.src||"https://sunwin.villas";setGameFrameSource(swFrame,target)}
   }else if(currentGame==="max789"){
     if(mx){mx.classList.toggle("on",toolOn);mx.setAttribute("aria-hidden",toolOn?"false":"true")}
-    if(mxFrame&&toolOn){const target=gameConfig.max789_game_url||mxFrame.dataset.src||"https://play.max789a.vin/";mxFrame.dataset.src=target;if(!mxFrame.src||mxFrame.src.endsWith("about:blank")||mxFrame.src!==target)mxFrame.src=target}
+    if(mxFrame&&toolOn){const target=gameConfig.max789_game_url||mxFrame.dataset.src||"https://play.max789a.vin/";setGameFrameSource(mxFrame,target)}
   }else if(f&&toolOn){
+    const target=gameConfig.lc79_game_url||f.dataset.src||"https://play.lc79.bet/";setGameFrameSource(f,target);
     f.style.visibility="visible";if(f.src&&!f.src.endsWith("about:blank"))requestAnimationFrame(()=>f.classList.add("show"));
   }
+  syncGameDirectOpen();
 }
 
 function authHeaders(extra={}) {
@@ -2359,7 +2396,7 @@ async function api(path, opts={}) {
     showExpiredGate();
     throw new Error("UNAUTHORIZED");
   }
-  if (!r.ok) throw new Error(data.detail || data.message || ("HTTP "+r.status));
+  if (!r.ok) { const e=new Error(data.detail || data.message || ("HTTP "+r.status)); e.status=r.status; throw e; }
   return data;
 }
 
@@ -2791,16 +2828,16 @@ function loadGameAfterAuth(){
   if(lc79UnloadTimer){clearTimeout(lc79UnloadTimer);lc79UnloadTimer=null}
   if(currentGame==="sunwin"){
     f.classList.remove("show");f.style.visibility="hidden";
-    if(swf){const target=gameConfig.sunwin_game_url||swf.dataset.src||"https://sunwin.villas";swf.dataset.src=target;if(!swf.src||swf.src.endsWith("about:blank")||swf.src!==target)swf.src=target}
+    if(swf){const target=gameConfig.sunwin_game_url||swf.dataset.src||"https://sunwin.villas";setGameFrameSource(swf,target)}
     setTimeout(applyGameStage,24);return;
   }
   if(currentGame==="max789"){
     f.classList.remove("show");f.style.visibility="hidden";
-    if(mxf){const target=gameConfig.max789_game_url||mxf.dataset.src||"https://play.max789a.vin/";mxf.dataset.src=target;if(!mxf.src||mxf.src.endsWith("about:blank")||mxf.src!==target)mxf.src=target}
+    if(mxf){const target=gameConfig.max789_game_url||mxf.dataset.src||"https://play.max789a.vin/";setGameFrameSource(mxf,target)}
     setTimeout(applyGameStage,24);return;
   }
   const target=gameConfig.lc79_game_url||f.dataset.src||"https://play.lc79.bet/";
-  f.dataset.src=target;f.style.visibility="visible";if(!f.src||f.src.endsWith("about:blank")||f.src!==target)f.src=target;
+  f.dataset.src=target;f.style.visibility="visible";setGameFrameSource(f,target);
   requestAnimationFrame(()=>f.classList.add("show"));setTimeout(applyGameStage,30);
 }
 
@@ -2954,7 +2991,7 @@ let __predictionTimer=0;
 async function poll(table){
   if(__predictionFlight.has(table))return __predictionFlight.get(table);
   const task=(async()=>{
-    const ctrl=new AbortController();const tid=setTimeout(()=>ctrl.abort(),9000);
+    const ctrl=new AbortController();const tid=setTimeout(()=>ctrl.abort(),18000);
     try{
       const p=await api("/api/predict/"+table,{method:"POST",body:"{}",signal:ctrl.signal});
       if(table===currentTable)showPredictionUI(p);
@@ -3181,7 +3218,7 @@ setInterval(()=>{if(!document.hidden)refreshSourceBoard()},12000);
 window.addEventListener('online',refreshSourceBoard,{passive:true});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshSourceBoard()},{passive:true});
 
-function portalInit(){ensureKeyGate();document.getElementById('key-gate').style.display='none';setToolVisible(false);portalShow('portal-start');document.getElementById('portal-start-btn').onclick=async()=>{const b=document.getElementById('portal-start-btn');b.textContent='ĐANG KHỞI TẠO...';if(await portalResume()){portalSetPage('home')}else{portalShow('portal-auth');portalAuthMode('login')}b.textContent=(appConfig.start_button_text||'BẮT ĐẦU')+' →'};document.getElementById('pa-login-tab').onclick=()=>portalAuthMode('login');document.getElementById('pa-reg-tab').onclick=()=>portalAuthMode('register');document.getElementById('pa-forgot').onclick=()=>portalAuthMode('forgot');document.getElementById('pa-eye').onclick=()=>{const i=document.getElementById('pa-pass');i.type=i.type==='password'?'text':'password'};document.getElementById('pa-submit').onclick=portalSubmitAuth;document.getElementById('pa-pass').addEventListener('keydown',e=>{if(e.key==='Enter')portalSubmitAuth()});document.getElementById('pa-code').addEventListener('keydown',e=>{if(e.key==='Enter')portalSubmitAuth()});document.getElementById('ph-link-btn').onclick=portalLinkKey;document.getElementById('portal-logout').onclick=()=>{portalToken='';localStorage.removeItem(PORTAL_TOKEN_KEY);portalShow('portal-auth');portalAuthMode('login')};document.querySelectorAll('.portal-dock button').forEach(b=>b.onclick=()=>portalSetPage(b.dataset.page));document.querySelectorAll('.portal-mode-btn').forEach(b=>b.onclick=e=>{e.stopPropagation();portalEnterGame(b.dataset.enterGame,b.dataset.enterTable)});document.querySelectorAll('.portal-game-card').forEach(card=>card.onclick=()=>{const b=card.querySelector('.portal-mode-btn');if(b)portalEnterGame(b.dataset.enterGame,b.dataset.enterTable)});document.querySelectorAll('#portal-amounts button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#portal-amounts button').forEach(x=>x.classList.remove('on'));b.classList.add('on');document.getElementById('portal-deposit-amount').value=b.dataset.v});document.getElementById('portal-deposit-create').onclick=portalCreateDeposit;document.getElementById('game-back-btn').onclick=portalExitGame}
+function portalInit(){ensureKeyGate();document.getElementById('key-gate').style.display='none';setToolVisible(false);portalShow('portal-start');document.getElementById('portal-start-btn').onclick=async()=>{const b=document.getElementById('portal-start-btn');b.textContent='ĐANG KHỞI TẠO...';if(await portalResume()){portalSetPage('home')}else{portalShow('portal-auth');portalAuthMode('login')}b.textContent=(appConfig.start_button_text||'BẮT ĐẦU')+' →'};document.getElementById('pa-login-tab').onclick=()=>portalAuthMode('login');document.getElementById('pa-reg-tab').onclick=()=>portalAuthMode('register');document.getElementById('pa-forgot').onclick=()=>portalAuthMode('forgot');document.getElementById('pa-eye').onclick=()=>{const i=document.getElementById('pa-pass');i.type=i.type==='password'?'text':'password'};document.getElementById('pa-submit').onclick=portalSubmitAuth;document.getElementById('pa-pass').addEventListener('keydown',e=>{if(e.key==='Enter')portalSubmitAuth()});document.getElementById('pa-code').addEventListener('keydown',e=>{if(e.key==='Enter')portalSubmitAuth()});document.getElementById('ph-link-btn').onclick=portalLinkKey;document.getElementById('portal-logout').onclick=()=>{portalToken='';localStorage.removeItem(PORTAL_TOKEN_KEY);portalShow('portal-auth');portalAuthMode('login')};document.querySelectorAll('.portal-dock button').forEach(b=>b.onclick=()=>portalSetPage(b.dataset.page));document.querySelectorAll('.portal-mode-btn').forEach(b=>b.onclick=e=>{e.stopPropagation();portalEnterGame(b.dataset.enterGame,b.dataset.enterTable)});document.querySelectorAll('.portal-game-card').forEach(card=>card.onclick=()=>{const b=card.querySelector('.portal-mode-btn');if(b)portalEnterGame(b.dataset.enterGame,b.dataset.enterTable)});document.querySelectorAll('#portal-amounts button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#portal-amounts button').forEach(x=>x.classList.remove('on'));b.classList.add('on');document.getElementById('portal-deposit-amount').value=b.dataset.v});document.getElementById('portal-deposit-create').onclick=portalCreateDeposit;document.getElementById('game-back-btn').onclick=portalExitGame;const gdo=document.getElementById('game-direct-open');if(gdo)gdo.onclick=()=>{const u=gdo.dataset.url;if(u)window.open(u,'_blank','noopener,noreferrer')}}
 
 window.__startTool=async function(){
   // V49: mỗi lần mở web luôn yêu cầu xác minh key lại.
@@ -3415,7 +3452,7 @@ document.addEventListener("DOMContentLoaded",()=>{
     if(table!==currentTable)return null;
     try{activePredictController?.abort()}catch(_){}
     const ctrl=new AbortController();activePredictController=ctrl;
-    const tid=setTimeout(()=>ctrl.abort(),10000);
+    const tid=setTimeout(()=>ctrl.abort(),18000);
     try{
       const p=await api('/api/predict/'+table,{method:'POST',body:'{}',signal:ctrl.signal});
       if(epoch!==gameEpoch||table!==currentTable)return p;
@@ -3471,11 +3508,150 @@ document.addEventListener("DOMContentLoaded",()=>{
 
   document.addEventListener('DOMContentLoaded',()=>{
     document.body.classList.add('liquid-glass-ui');
-    if(!localStorage.getItem(THEME_KEY)){try{applyTheme('light')}catch(_){}}
-    const back=document.getElementById('game-back-btn');if(back)back.onclick=portalExitGame;
+    try{applyTheme('light');localStorage.setItem(THEME_KEY,'light')}catch(_){}
+    const back=document.getElementById('game-back-btn');if(back)back.onclick=portalExitGame;const gdo=document.getElementById('game-direct-open');if(gdo)gdo.onclick=()=>{const u=gdo.dataset.url;if(u)window.open(u,'_blank','noopener,noreferrer')};syncGameDirectOpen();
   });
 })();
 </script>
+
+<style id="liquid-rounded-v2-final">
+/* ===== TAIXIUTOOL V2 — LIGHT LIQUID / ROUND / iPHONE SAFE ===== */
+:root{
+  --v2-bg:#eaf6f8;--v2-bg2:#f5fbfd;--v2-card:rgba(255,255,255,.72);
+  --v2-card-strong:rgba(250,254,255,.90);--v2-line:rgba(255,255,255,.90);
+  --v2-ink:#163542;--v2-muted:#66808c;--v2-cyan:#27cbd7;--v2-blue:#6f8df6;
+  --v2-mint:#61e0bd;--v2-warn:#d9a83b;--v2-danger:#e86579;
+  --v2-shadow:0 18px 48px rgba(40,86,104,.14),inset 0 1px 0 rgba(255,255,255,.96);
+  --v2-r-xl:30px;--v2-r-lg:25px;--v2-r-md:20px;--v2-r-sm:16px;
+}
+html,body{background:var(--v2-bg)!important;color:var(--v2-ink)!important}
+body{background-image:radial-gradient(circle at 10% 4%,rgba(255,255,255,.96),transparent 28%),radial-gradient(circle at 92% 18%,rgba(119,213,245,.25),transparent 30%),linear-gradient(145deg,#edf9f9,#e9f1fb)!important}
+#portal-app.ultra-app{background:transparent!important;color:var(--v2-ink)!important}
+#portal-app.ultra-app::before{background-image:linear-gradient(145deg,rgba(239,251,251,.91),rgba(235,242,253,.91)),var(--liquid-wall)!important;filter:saturate(.92) brightness(1.05)!important}
+
+/* One consistent rounded language. No square / diagonal corner cards. */
+.ultra-home-hero,.ultra-panel,.portal-stat,.portal-game-card,.account-pro-shell,
+.account-pro-hero,.account-balance-pro,.account-info-pro .info-cell,.account-mini-strip span,
+.key-wallet-strip,.portal-deposit-box,.portal-copy-row,.portal-copy-row>div,.portal-copy-row>button,
+.motion-showcase,.motion-live-main,.motion-live-side,.source-board,.portal-plan,.tx-row,.notice-card,
+.ultra-account-strip,.ultra-game-preview button,.ultra-note-box,.real-status-board,.truth-card,
+.vqr-bank-card,.portal-qr,.portal-money-input,.portal-linkkey,.portal-linkkey input,
+.ultra-auth input,.ultra-auth-shell,.ultra-start-shell,.portal-plans>*{
+  border-radius:var(--v2-r-lg)!important;
+}
+.ultra-panel:nth-of-type(even),.ultra-panel:nth-of-type(odd),
+.portal-stat:nth-child(even),.portal-stat:nth-child(odd),
+.account-info-pro .info-cell:nth-child(even),.account-info-pro .info-cell:nth-child(odd),
+.account-pro-shell{border-radius:var(--v2-r-lg)!important}
+
+/* Replace the old black cards with bright frosted glass. */
+.ultra-home-hero,.ultra-panel,.portal-stat,.portal-game-card,.account-pro-shell,
+.account-pro-hero,.account-balance-pro,.account-info-pro .info-cell,.account-mini-strip span,
+.key-wallet-strip,.portal-deposit-box,.motion-showcase,.motion-live-main,.motion-live-side,
+.source-board,.portal-plan,.tx-row,.notice-card,.ultra-account-strip,.ultra-game-preview button,
+.ultra-note-box,.real-status-board,.truth-card,.vqr-bank-card,.portal-copy-row>div,.portal-copy-row>button{
+  background:linear-gradient(145deg,rgba(255,255,255,.78),rgba(236,248,251,.58))!important;
+  border:1px solid var(--v2-line)!important;color:var(--v2-ink)!important;
+  box-shadow:var(--v2-shadow)!important;
+  -webkit-backdrop-filter:blur(24px) saturate(1.35)!important;
+  backdrop-filter:blur(24px) saturate(1.35)!important;
+}
+.ultra-home-hero{border-radius:32px!important;padding:22px!important;overflow:hidden!important;position:relative!important}
+.ultra-home-hero::after,.account-pro-hero::after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(112deg,rgba(255,255,255,.55),transparent 34%,transparent 68%,rgba(69,209,221,.12));border-radius:inherit}
+.ultra-home-copy,.account-pro-copy,.account-pro-hero>*{position:relative;z-index:1}
+.ultra-home-copy h2,.ultra-section-head h3,.ultra-page-title h2,.account-pro-copy h3,
+.account-info-pro .info-cell b,.ultra-hero-metrics b,.ultra-account-strip b,.portal-stat b{color:#153744!important;text-shadow:none!important}
+.ultra-home-copy p,.ultra-section-head small,.ultra-page-title p,.account-pro-copy p,
+.account-info-pro .info-cell span,.ultra-hero-metrics span,.ultra-account-strip span,.portal-stat span,
+.portal-stat small,.game-desc,.tx-row small{color:var(--v2-muted)!important;text-shadow:none!important}
+.ultra-home-copy h2 span,.account-pro-copy h3,.account-pro-copy .verified{color:#159bab!important}
+
+.ultra-hero-metrics{gap:9px!important}.ultra-hero-metrics>div{
+  background:rgba(255,255,255,.58)!important;border:1px solid rgba(255,255,255,.90)!important;
+  border-radius:18px!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.96),0 8px 22px rgba(44,91,108,.08)!important
+}
+.ultra-notice,.portal-notice{border:1px solid rgba(41,199,211,.24)!important;border-left:1px solid rgba(41,199,211,.24)!important;border-radius:18px!important;background:linear-gradient(135deg,rgba(216,250,248,.78),rgba(235,246,255,.76))!important;color:#3f6f78!important;box-shadow:0 10px 25px rgba(46,100,115,.07)!important}
+.ultra-game-preview button{overflow:hidden!important;color:var(--v2-ink)!important}.ultra-game-preview small{color:#718895!important}
+.ultra-account-strip{overflow:hidden!important}.ultra-account-strip>div{border-color:rgba(92,151,169,.12)!important}
+.ultra-mini-cta,.ultra-section-head button{border-radius:16px!important;background:rgba(255,255,255,.58)!important;color:#138393!important;border:1px solid rgba(255,255,255,.86)!important;box-shadow:0 8px 20px rgba(46,110,126,.08)!important}
+
+/* Account page from screenshot: every information tile becomes light and rounded. */
+.account-pro-hero{padding:18px!important;background:linear-gradient(135deg,rgba(235,255,253,.92),rgba(239,246,255,.86))!important}
+.account-pro-hero:before{opacity:.32!important}.account-balance-pro{background:linear-gradient(110deg,rgba(211,249,243,.90),rgba(225,245,255,.90))!important}
+.account-balance-pro b,.account-balance-pro strong{color:#168f89!important;text-shadow:none!important}
+.account-info-pro{gap:10px!important}.account-info-pro .info-cell{min-height:84px!important;padding:14px!important}
+.account-info-pro .info-cell.key b{color:#168ba2!important}.account-info-pro .info-cell.exp b{color:#bd8a25!important}.account-info-pro .info-cell.device b{color:#526f7c!important}.account-info-pro .info-cell.security b{color:#20996d!important}
+.account-mini-strip{gap:7px!important}.account-mini-strip span{background:rgba(255,255,255,.62)!important;color:#466875!important;border:1px solid rgba(255,255,255,.88)!important;box-shadow:0 8px 18px rgba(51,91,106,.07)!important}
+.portal-linkkey{background:rgba(255,255,255,.52)!important;border:1px solid rgba(255,255,255,.86)!important;box-shadow:var(--v2-shadow)!important;padding:16px!important}
+.portal-linkkey input,.portal-money-input,.ultra-auth input{background:rgba(255,255,255,.82)!important;color:#193b47!important;border:1px solid rgba(130,193,208,.26)!important;border-radius:17px!important;box-shadow:inset 0 1px 0 #fff,0 8px 18px rgba(51,91,106,.06)!important}
+
+/* Header + navigation remain glass, but readable and not black. */
+.ultra-topbar{background:rgba(247,253,255,.74)!important;border-radius:0 0 30px 30px!important;border-color:rgba(255,255,255,.91)!important;box-shadow:0 12px 32px rgba(47,90,108,.11)!important}
+.portal-dock.ultra-dock,body.portal-game-mode #dock,#menu,#hist,#stats-mini{
+  background:rgba(245,252,254,.86)!important;color:var(--v2-ink)!important;border:1px solid rgba(255,255,255,.92)!important;
+  box-shadow:0 16px 42px rgba(38,82,101,.16),inset 0 1px 0 #fff!important;
+  -webkit-backdrop-filter:blur(26px) saturate(1.35)!important;backdrop-filter:blur(26px) saturate(1.35)!important
+}
+#menu,#hist{border-radius:22px!important}#dock{border-radius:22px!important}
+#dock button,#menu button,.h-title,.h-tab,.h-filter,.h-foot button{color:#375866!important}
+#dock button.on,#menu button.active,.h-tab.on,.h-filter.on{background:linear-gradient(135deg,rgba(218,251,249,.95),rgba(224,239,255,.90))!important;color:#0b8193!important;border-color:rgba(64,193,207,.28)!important;box-shadow:inset 0 1px 0 #fff!important}
+.h-head,.h-tabs,.h-filters,.h-foot,#qstats{background:rgba(237,248,251,.72)!important;border-color:rgba(84,151,170,.10)!important}
+.qcard,.row{background:rgba(255,255,255,.58)!important;border-color:rgba(92,151,169,.10)!important;color:#294b59!important;border-radius:12px!important}.qcard .qv{color:#1b3c49!important}.r-time{color:#78909b!important}
+
+/* Game screen: light shell instead of the full black page shown on iPhone. */
+body.portal-game-mode{background:linear-gradient(145deg,#e8f7f8,#eef4fc)!important;overflow:hidden!important}
+body.portal-game-mode::before{content:"";position:fixed;inset:0;pointer-events:none;background:radial-gradient(circle at 14% 13%,rgba(255,255,255,.98),transparent 30%),radial-gradient(circle at 88% 24%,rgba(82,212,226,.16),transparent 34%),radial-gradient(circle at 54% 92%,rgba(118,145,247,.12),transparent 30%)}
+#sunwin-stage,#max789-stage{background:linear-gradient(145deg,#e9f7f7,#edf4fc)!important;color:var(--v2-ink)!important;padding:0!important}
+body.portal-game-mode #game-frame,#sunwin-frame,#max789-frame{
+  position:fixed!important;top:max(74px,calc(env(safe-area-inset-top) + 54px))!important;right:10px!important;bottom:max(82px,calc(env(safe-area-inset-bottom) + 70px))!important;left:10px!important;
+  width:auto!important;height:auto!important;inset-block-start:max(74px,calc(env(safe-area-inset-top) + 54px))!important;
+  background:#f8fcfd!important;border:1px solid rgba(255,255,255,.96)!important;border-radius:28px!important;
+  box-shadow:0 20px 58px rgba(35,77,96,.16),inset 0 1px 0 #fff!important;overflow:hidden!important
+}
+body.portal-game-mode #game-frame{inset:auto 10px max(82px,calc(env(safe-area-inset-bottom) + 70px)) 10px!important;top:max(74px,calc(env(safe-area-inset-top) + 54px))!important}
+#sunwin-frame,#max789-frame{inset:auto 10px max(82px,calc(env(safe-area-inset-bottom) + 70px)) 10px!important;top:max(74px,calc(env(safe-area-inset-top) + 54px))!important}
+body.portal-game-mode #game-back-btn,#game-direct-open{
+  position:fixed!important;top:max(12px,env(safe-area-inset-top))!important;z-index:3000102!important;height:46px!important;padding:0 14px!important;
+  border-radius:16px!important;border:1px solid rgba(255,255,255,.94)!important;background:rgba(247,253,255,.89)!important;color:#255463!important;
+  box-shadow:0 12px 28px rgba(38,78,94,.13),inset 0 1px 0 #fff!important;-webkit-backdrop-filter:blur(20px)!important;backdrop-filter:blur(20px)!important;font-weight:1000!important
+}
+body.portal-game-mode #game-back-btn{left:10px!important}#game-direct-open{display:none;right:10px!important}body.portal-game-mode #game-direct-open{display:block!important}
+body:not(.portal-game-mode) #game-direct-open{display:none!important}
+body.portal-game-mode #robot .robot-side-hud{
+  background:rgba(249,253,255,.88)!important;color:#173b48!important;border:1px solid rgba(255,255,255,.94)!important;
+  box-shadow:0 14px 38px rgba(34,76,93,.16),inset 0 1px 0 #fff!important;-webkit-backdrop-filter:blur(20px) saturate(1.25)!important;backdrop-filter:blur(20px) saturate(1.25)!important
+}
+body.portal-game-mode #robot .robot-side-hud #sid{color:#b78616!important;text-shadow:none!important;-webkit-text-stroke:0!important}
+body.portal-game-mode #robot .robot-side-hud #conf{color:#587480!important;text-shadow:none!important;-webkit-text-stroke:0!important}
+body.portal-game-mode #robot .pbar{background:rgba(87,127,143,.13)!important;border-color:rgba(70,125,143,.12)!important}
+body.portal-game-mode #dock{bottom:max(10px,env(safe-area-inset-bottom))!important}
+
+/* Remove remaining black visual blocks on core portal screens. */
+.portal-money-input,.portal-copy-row div,.portal-copy-row button,.portal-mode-btn,.ultra-action,.portal-primary,
+.portal-start-btn,.portal-linkkey button{border-radius:18px!important}
+.portal-mode-btn,.ultra-action,.portal-primary,.portal-start-btn,.portal-linkkey button{background:linear-gradient(135deg,#65dfdc,#81a5ff)!important;color:#10333e!important;border:1px solid rgba(255,255,255,.88)!important;box-shadow:0 10px 25px rgba(70,155,183,.15)!important}
+#vip-loader{background:rgba(225,242,247,.86)!important}.vip-load-box{background:rgba(250,254,255,.92)!important;color:#244d5b!important;border-color:rgba(255,255,255,.94)!important;border-radius:26px!important;box-shadow:0 20px 60px rgba(36,78,95,.16)!important}.vip-load-sub{color:#708791!important}
+
+/* Key/free/music/maintenance overlays also stay light: no black fallback surfaces. */
+#key-gate,#free-panel,#music-panel,#portal-maintenance{background:rgba(232,246,250,.94)!important;color:var(--v2-ink)!important}
+#key-gate .kg-card,.free48,.music-card,#portal-maintenance .m-card{background:linear-gradient(145deg,rgba(255,255,255,.96),rgba(235,248,251,.92))!important;color:var(--v2-ink)!important;border:1px solid rgba(255,255,255,.96)!important;border-radius:28px!important;box-shadow:0 24px 64px rgba(36,79,96,.16),inset 0 1px 0 #fff!important}
+#key-gate .kg-title,.f48-title,.music-card,.music-head,.kg-feature b,.kg-game-card b{color:#173946!important;text-shadow:none!important}
+#key-gate .kg-sub,.f48-sub,.f48-note,.music-card small,.kg-game-card small,.kg-foot{color:#687f8a!important}
+#key-gate .kg-input,.f48-row input,.music-name,.music-actions button,.music-head button,.f48-linkbox,.f48-codebox,.f48-keybox,.f48-x,.f48-dot,.kg-feature,.kg-captcha,.kg-game-card{background:rgba(248,253,255,.92)!important;color:#173946!important;border-color:rgba(121,184,200,.25)!important;border-radius:16px!important;box-shadow:none!important}
+#key-gate .kg-game-card.selected{background:linear-gradient(145deg,rgba(217,251,246,.96),rgba(231,246,255,.95))!important;border-color:rgba(50,193,193,.42)!important}
+#key-gate .kg-game-card.sun.selected{background:linear-gradient(145deg,rgba(255,247,219,.96),rgba(250,238,255,.94))!important;border-color:rgba(214,170,60,.38)!important}
+.f48-line{background:rgba(78,126,143,.12)!important}.f48-dot.ok{background:#eafbf5!important}.f48-copy{background:#effafd!important;color:#168b9b!important;border-color:rgba(104,176,194,.24)!important}
+#theme-btn{display:none!important}
+
+@media(max-width:600px){
+  .ultra-home-hero{padding:18px!important;border-radius:26px!important}
+  .ultra-panel,.portal-game-card,.account-pro-shell,.account-pro-hero,.account-info-pro .info-cell{border-radius:22px!important}
+  .portal-main{padding-left:12px!important;padding-right:12px!important}
+  body.portal-game-mode #game-frame,#sunwin-frame,#max789-frame{left:8px!important;right:8px!important;border-radius:23px!important}
+  body.portal-game-mode #game-back-btn,#game-direct-open{height:42px!important;padding:0 11px!important;font-size:9px!important}
+}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+</style>
 
 </body>
 </html>
