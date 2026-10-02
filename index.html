@@ -2961,12 +2961,12 @@ function renderHist(){
   document.getElementById("sm-r").textContent=rate+"%";
   if(!document.getElementById("hist")?.classList.contains("on"))return;
   listEl.innerHTML=raw.length?raw.slice(0,40).map(x=>{
-    const pr=x.side==="T"?"TÀI":x.side==="X"?"XỈU":"BỎ";
+    const pr=x.side==="T"?"TÀI":x.side==="X"?"XỈU":"—";
     const pc=x.side==="T"?"tai":x.side==="X"?"xiu":"skip";
     const act=x.actual==="T"?"TÀI":x.actual==="X"?"XỈU":"...";
     const ac=x.actual==="T"?"tai":x.actual==="X"?"xiu":"wait";
     const rc=x.correct===true?"ok":x.correct===false?"no":!x.side?"skip":"wait";
-    const ico=x.correct===true?"✅":x.correct===false?"❌":!x.side?"⏭️":"⏳";
+    const ico=x.correct===true?"✅":x.correct===false?"❌":!x.side?"•":"⏳";
     return `<div class="row ${rc}"><span class="r-sid">#${x.sessionId}</span>
       <span class="r-pred ${pc}">${pr}</span><span class="r-arrow">→</span>
       <span class="r-act ${ac}">${act}</span><span class="r-ico">${ico}</span>
@@ -2985,9 +2985,9 @@ function showPredictionUI(p){
   const hud=document.querySelector("#robot .robot-side-hud");
   const pc=document.getElementById("pattern-chip"),rc=document.getElementById("regime-chip");
   conf.className="";
-  if(!p.side){pred.innerText="BỎ QUA";pred.className="skip"}
+  if(!p.side){pred.innerText="ĐANG TÍNH";pred.className="load"}
   else{pred.innerText=p.side==="T"?"TÀI":"XỈU";pred.className=p.side==="T"?"tai":"xiu"}
-  if(hud)hud.dataset.side=p.side||"SKIP";
+  if(hud)hud.dataset.side=p.side||"PENDING";
   if(pc)pc.textContent=(p.pattern||"MULTI-PATTERN").replace(/^RLE\s*/,"RLE ");
   if(rc)rc.textContent=p.regime||"ADAPTIVE";
   document.getElementById("pfill").style.width=(p.confidence||0)+"%";
@@ -4040,7 +4040,7 @@ body.portal-game-mode.game-custom #lc79-subdock{display:none!important}
   function decorateBuiltins(){
     document.querySelectorAll('#portal-games .portal-game-card:not(.v5-custom-card)').forEach(card=>{
       const copy=card.querySelector('.ultra-card-copy');if(!copy||copy.querySelector('.v5-engine-row'))return;
-      const row=document.createElement('div');row.className='v5-engine-row';row.innerHTML='<span>ENSEMBLE</span><span>TỰ HỌC CẦU</span><span>V69</span>';copy.appendChild(row);
+      const row=document.createElement('div');row.className='v5-engine-row';row.innerHTML='<span>ENSEMBLE</span><span>TỰ HỌC CẦU</span><span>V14 MAX</span>';copy.appendChild(row);
     });
   }
   function bindCard(card){
@@ -4057,7 +4057,7 @@ body.portal-game-mode.game-custom #lc79-subdock{display:none!important}
       const table=g.table||tableFor(g.slug);customMap.set(table,g);
       const card=document.createElement('div');card.className='portal-game-card ultra-game-card v5-custom-card';card.dataset.v5Custom='1';card.dataset.game=table;
       const img=g.image_url?`<img src="${esc(g.image_url)}" alt="${esc(g.name||g.slug)}" loading="lazy">`:`<div class="v5-fallback-logo">${esc((g.name||g.slug).slice(0,10).toUpperCase())}</div>`;
-      card.innerHTML=`<div class="ultra-card-image ${g.image_url?'':'no-image'}">${img}<span class="ultra-live">● ${g.ready?'AI LIVE':'GAME'}</span></div><div class="ultra-card-copy"><small>GAME ${String(i+4).padStart(2,'0')}</small><h3>${esc(g.name||g.slug)}</h3><p>${esc(g.description||'Game mở rộng · quản lý trực tiếp từ bot admin.')}</p><div class="v5-engine-row"><span>${g.ready?'ENSEMBLE':'LINK'}</span><span>${g.ready?'TỰ HỌC CẦU':'CHƯA API'}</span><span>AI ${Number(g.algo_mode||2)}</span></div></div><div class="portal-mode-row one"><button class="portal-mode-btn" data-enter-game="${esc(table)}" data-enter-table="${esc(table)}">${g.ready?'✦ VÀO + PHÂN TÍCH':'VÀO GAME'}</button></div>`;
+      card.innerHTML=`<div class="ultra-card-image ${g.image_url?'':'no-image'}">${img}<span class="ultra-live">● ${g.ready?'AI LIVE':'GAME'}</span></div><div class="ultra-card-copy"><small>GAME ${String(i+4).padStart(2,'0')}</small><h3>${esc(g.name||g.slug)}</h3><p>${esc(g.description||'Game mở rộng · quản lý trực tiếp từ bot admin.')}</p><div class="v5-engine-row"><span>${g.ready?String(g.algo_policy||'auto').toUpperCase():'LINK'}</span><span>${g.ready?String(g.base_engine||'auto').toUpperCase():'CHƯA API'}</span><span>AI ${Number(g.algo_mode||2)}</span></div></div><div class="portal-mode-row one"><button class="portal-mode-btn" data-enter-game="${esc(table)}" data-enter-table="${esc(table)}">${g.ready?'✦ VÀO + PHÂN TÍCH':'VÀO GAME'}</button></div>`;
       grid.appendChild(card);bindCard(card);
     });
     const banner=document.querySelector('#portal-games .game-center-banner b');if(banner){const total=3+rows.filter(x=>x&&x.enabled!==false).length;banner.textContent=`${total} hệ thống · engine gộp + tự học theo từng game`}
@@ -4189,7 +4189,14 @@ body.portal-game-mode.v9-embedded #license-chip{z-index:3000170!important}
     return (Array.isArray(cfg?.custom_games)?cfg.custom_games:[]).find(x=>String(x?.table||('custom__'+String(x?.slug||'')))===target.table)||null;
   }
   function urlFor(target,cfg){
-    if(target.game==='custom')return cleanUrl(customFor(target,cfg)?.game_url);
+    if(target.game==='custom'){
+      const g=customFor(target,cfg);
+      if(String(g?.slug||'')==='baccarat-live'){
+        let local='';try{local=sessionStorage.getItem('tt_baccarat_game_url')||localStorage.getItem('tt_baccarat_game_url')||''}catch(_){ }
+        if(local)return cleanUrl(local);
+      }
+      return cleanUrl(g?.game_url);
+    }
     if(target.game==='sunwin')return cleanUrl(cfg?.sunwin_game_url||$('sunwin-frame')?.dataset?.src);
     if(target.game==='max789')return cleanUrl(cfg?.max789_game_url||$('max789-frame')?.dataset?.src);
     return cleanUrl(cfg?.lc79_game_url||$('game-frame')?.dataset?.src);
@@ -4226,12 +4233,17 @@ body.portal-game-mode.v9-embedded #license-chip{z-index:3000170!important}
     document.body.classList.add('portal-game-mode','v9-embedded','game-'+(target.game==='custom'?'custom':target.game),'v9-no-tool');
     if(target.game==='lc79'||target.game==='max789')document.body.classList.add('game-has-modes');
     const nm=$('v9-game-name'),st=$('v9-game-state');if(nm)nm.textContent=labelFor(target,cfg);if(st)st.textContent='ĐANG TẢI GAME · ĐANG XÁC THỰC TOOL';
-    const fr=$('v9-game-iframe');
+    const fr=$('v9-game-iframe'),cg=customFor(target,cfg),analysisOnly=!!(target.game==='custom'&&cg?.analysis_only&&!url);
+    document.body.classList.toggle('v14-analysis-only',analysisOnly);
     if(fr){
-      const old=fr.getAttribute('src')||'';
-      if(old!==url){fr.src='about:blank';requestAnimationFrame(()=>{fr.src=url})}
-      fr.onload=()=>{const s=$('v9-game-state');if(s)s.textContent=document.body.classList.contains('v9-no-tool')?'GAME ĐÃ MỞ · ĐANG XÁC THỰC TOOL':'GAME + ROBOT ĐÃ SẴN SÀNG'};
+      fr.style.display=analysisOnly?'none':'block';
+      if(analysisOnly){fr.src='about:blank'}else{
+        const old=fr.getAttribute('src')||'';
+        if(old!==url){fr.src='about:blank';requestAnimationFrame(()=>{fr.src=url})}
+        fr.onload=()=>{const s=$('v9-game-state');if(s)s.textContent=document.body.classList.contains('v9-no-tool')?'GAME ĐÃ MỞ · ĐANG XÁC THỰC TOOL':'GAME + ROBOT ĐÃ SẴN SÀNG'};
+      }
     }
+    try{window.__v14StageSync?.(target,cfg,analysisOnly)}catch(_){ }
     try{syncGameButtons?.()}catch(_){ }
   }
   async function attachTool(target,seq){
@@ -4272,10 +4284,10 @@ body.portal-game-mode.v9-embedded #license-chip{z-index:3000170!important}
       const cached=gameConfig||{};let url=urlFor(target,cached);
       if(url){setShell(target,cached,url);attachTool(target,seq);toolStarted=true}
       const cfg=await freshConfig();if(seq!==entrySeq)return;
-      const freshUrl=urlFor(target,cfg);
-      if(!freshUrl&&!url){try{portalToast?.('Game chưa có link. Admin cần cấu hình game_url.','err')}catch(_){alert('Game chưa có link.')}return}
+      const freshUrl=urlFor(target,cfg),cg=customFor(target,cfg),analysisOnly=!!(target.game==='custom'&&cg?.analysis_only);
+      if(!freshUrl&&!url&&!analysisOnly){try{portalToast?.('Game chưa có link. Admin cần cấu hình game_url.','err')}catch(_){alert('Game chưa có link.')}return}
       if(freshUrl&&freshUrl!==url){url=freshUrl;setShell(target,cfg,url)}
-      else if(!toolStarted){setShell(target,cfg,freshUrl||url)}
+      else if(!toolStarted||analysisOnly){setShell(target,cfg,freshUrl||url||'')}
       if(!toolStarted){attachTool(target,seq);toolStarted=true}
     }finally{entering=false}
   }
@@ -4284,7 +4296,7 @@ body.portal-game-mode.v9-embedded #license-chip{z-index:3000170!important}
     try{stopPredictionPollers?.()}catch(_){ }
     if(window.__lc79HistoryTimer){clearInterval(window.__lc79HistoryTimer);window.__lc79HistoryTimer=null}
     const fr=$('v9-game-iframe');if(fr)fr.src='about:blank';
-    document.body.classList.remove('portal-game-mode','v9-embedded','v9-no-tool','game-lc79','game-sunwin','game-max789','game-custom','game-has-modes','game-entering','game-switching','game-guest');
+    document.body.classList.remove('portal-game-mode','v9-embedded','v9-no-tool','v14-analysis-only','game-lc79','game-sunwin','game-max789','game-custom','game-has-modes','game-entering','game-switching','game-guest');
     try{setToolVisible(false)}catch(_){ }
     $('portal-app')?.classList.remove('portal-hidden');
     try{portalSetPage('games')}catch(_){ }
@@ -4366,5 +4378,1163 @@ body.portal-game-mode.v9-embedded #v9-game-shell{background:#eaf7fa!important}bo
   if(typeof oldRefresh==='function')window.portalRefresh=async function(){const r=await oldRefresh.apply(this,arguments);try{const sec=portalProfile?.security;if(sec&&$('v10-security-copy'))$('v10-security-copy').textContent=`1 phiên đăng nhập đang hoạt động · khóa thiết bị: ${sec.device_bound?'BẬT':'TẮT'} · phiên ${sec.session_hours||12}h · đăng nhập mới tự thu hồi phiên cũ.`}catch(_){}return r};
   document.addEventListener('DOMContentLoaded',()=>{installDecor();apiBoard();setInterval(()=>{if(!document.hidden)apiBoard()},12000)});
 })();
-</script>\n</body>
+</script>\n
+<!-- ===== V11 CRYSTAL CLARITY / QR STABILITY ===== -->
+<style id="v11-crystal-clarity">
+:root{--v11-ink:#163743;--v11-ink2:#315b68;--v11-muted:#68848e;--v11-line:rgba(255,255,255,.88);--v11-glass:rgba(248,253,255,.66);--v11-glass2:rgba(239,250,252,.58);--v11-aqua:#6bded9;--v11-blue:#8fa9ff;--v11-violet:#a798ff;--v11-mint:#9de8c9}
+body{background:#dceff3!important;color:var(--v11-ink)!important}
+#portal-app::before{background:url('/assets/htung_home_bg.webp') center 30%/cover no-repeat!important;filter:saturate(.88) brightness(1.04)!important;transform:scale(1.02)!important;opacity:1!important}
+#portal-app::after{background:linear-gradient(180deg,rgba(236,249,251,.52),rgba(239,248,252,.48) 52%,rgba(230,245,248,.60)),radial-gradient(circle at 10% 12%,rgba(89,218,213,.15),transparent 31%),radial-gradient(circle at 88% 25%,rgba(137,144,255,.13),transparent 34%)!important;-webkit-backdrop-filter:blur(5px)!important;backdrop-filter:blur(5px)!important}
+.portal-main{background:transparent!important}
+.portal-top,.ultra-panel,.portal-stat,.portal-game-card,.account-pro-shell,.account-pro-hero,.account-info-pro .info-cell,.key-wallet-strip,.portal-deposit-box,.notice-card,.source-board,.motion-showcase,.motion-live-main,.motion-live-side,.truth-card,.game-center-banner,.vqr-bank-card{background:linear-gradient(145deg,var(--v11-glass),var(--v11-glass2))!important;border:1px solid rgba(255,255,255,.92)!important;box-shadow:0 15px 40px rgba(36,80,96,.12),inset 0 1px 0 rgba(255,255,255,.95)!important;color:var(--v11-ink)!important}
+.portal-page h1,.portal-page h2,.portal-page h3,.portal-game-card h3,.ultra-card-copy h3,.truth-card strong,.account-pro-hero b,.info-cell b,.vqr-head b,.vqr-amount{color:var(--v11-ink)!important;text-shadow:none!important}
+.portal-page p,.portal-page small,.portal-game-card p,.truth-card p,.truth-card small,.account-pro-hero small,.info-cell small,.vqr-head small,.vqr-bank-copy small,.vqr-bank-meta span{color:var(--v11-muted)!important;text-shadow:none!important}
+#portal-games .ultra-games-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important}
+#portal-games .portal-game-card{border-radius:27px!important;padding:9px!important;box-shadow:0 16px 38px rgba(31,78,95,.14),inset 0 1px 0 white!important}
+#portal-games .ultra-card-image{height:148px!important;border-radius:21px!important;background:#edf8fa!important}
+#portal-games .ultra-card-image img{filter:saturate(1.08) contrast(1.04) brightness(1.02)!important}
+#portal-games .ultra-card-copy{min-height:94px!important;padding:10px 5px 7px!important}
+#portal-games .ultra-card-copy h3{font-size:24px!important;letter-spacing:.01em!important}
+#portal-games .ultra-card-copy p{font-size:8.4px!important;font-weight:800!important;line-height:1.45!important;min-height:25px!important}
+#portal-games .v5-engine-row span{background:rgba(255,255,255,.72)!important;border-color:rgba(77,168,181,.23)!important;color:#356675!important}
+#portal-games .portal-mode-btn{background:linear-gradient(130deg,rgba(210,248,242,.94),rgba(218,229,255,.94))!important;color:#184653!important;border:1px solid rgba(255,255,255,.96)!important;min-height:50px!important;box-shadow:0 9px 22px rgba(39,91,109,.11),inset 0 1px 0 white!important}
+.portal-dock{background:rgba(247,252,254,.74)!important;border:1px solid rgba(255,255,255,.94)!important;box-shadow:0 14px 40px rgba(34,72,89,.15)!important}
+.portal-dock button{color:#526f79!important}.portal-dock button.on{background:linear-gradient(135deg,rgba(205,249,243,.92),rgba(225,232,255,.92))!important;color:#194a56!important}
+#portal-home .ultra-hero h1,#portal-home .ultra-hero strong,#portal-home .truth-card strong{color:#173843!important}
+#portal-home .ultra-hero p,#portal-home .truth-card p{color:#54717c!important}
+#portal-deposit .ultra-panel,#portal-deposit .vqr-bank-card,.portal-deposit-box.vqr-result{background:rgba(248,253,255,.74)!important;border-radius:26px!important}
+#portal-deposit .portal-money-input{background:rgba(255,255,255,.68)!important;color:#173c48!important;border:1px solid rgba(86,166,181,.20)!important;border-radius:18px!important}
+#portal-deposit .ultra-amounts button{background:rgba(255,255,255,.70)!important;color:#365f6d!important;border-radius:16px!important}.portal-deposit-box.vqr-result{scroll-margin-top:90px}
+.portal-qr,.vqr-qr-shell{border-radius:24px!important}.portal-copy-row div,.portal-copy-row button,.vqr-copy-item{border-radius:15px!important}
+.v11-live-ring{position:fixed;inset:0;z-index:1;pointer-events:none;overflow:hidden}.v11-live-ring:before,.v11-live-ring:after{content:"";position:absolute;width:210px;height:210px;border-radius:50%;border:2px solid rgba(87,218,220,.20);box-shadow:0 0 28px rgba(92,215,224,.13),inset 0 0 24px rgba(146,142,255,.10);animation:v11Ring 8s ease-in-out infinite}.v11-live-ring:before{left:-110px;top:22vh}.v11-live-ring:after{right:-125px;bottom:19vh;animation-delay:-4s}@keyframes v11Ring{50%{transform:scale(1.15) rotate(140deg);opacity:.45}}
+@media(max-width:420px){#portal-games .ultra-card-image{height:126px!important}#portal-games .ultra-card-copy h3{font-size:21px!important}#portal-games .portal-mode-btn{min-height:46px!important;font-size:8px!important}.portal-game-card{border-radius:23px!important}}
+@media(prefers-reduced-motion:reduce){.v11-live-ring:before,.v11-live-ring:after{animation:none!important}}
+</style>
+<script id="v11-stability-js">
+(()=>{
+  const KEY='tt_v11_deposit_cache';
+  let lastDepositSig='';
+  const esc=s=>String(s??'');
+  function cacheDeposit(d){try{if(d)sessionStorage.setItem(KEY,JSON.stringify(d));else sessionStorage.removeItem(KEY)}catch(_){}}
+  function cachedDeposit(){try{return JSON.parse(sessionStorage.getItem(KEY)||'null')}catch(_){return null}}
+  function sig(d){return d?`${d.id||''}|${d.status||''}|${d.expires_at||''}|${d.amount||''}`:''}
+  const baseRender=window.portalRenderDeposit;
+  if(typeof baseRender==='function'){
+    window.portalRenderDeposit=portalRenderDeposit=function(d){
+      if(d)cacheDeposit(d);
+      const beforeY=document.getElementById('portal-app')?.scrollTop||0;
+      const r=baseRender(d);
+      const after=document.getElementById('portal-app');
+      if(after&&beforeY>0)requestAnimationFrame(()=>{after.scrollTop=beforeY});
+      lastDepositSig=sig(d);return r;
+    };
+  }
+  const baseLoad=window.portalLoadDeposit;
+  window.portalLoadDeposit=portalLoadDeposit=async function(){
+    const c=cachedDeposit();if(c&&typeof portalRenderDeposit==='function'&&!document.getElementById('portal-deposit-box')?.innerHTML)portalRenderDeposit(c);
+    try{
+      const d=await portalFetch('/api/account/deposits/current');
+      const dep=d?.deposit||null;
+      if(sig(dep)!==lastDepositSig)portalRenderDeposit(dep);
+      await portalLoadTransactions();
+    }catch(e){console.warn('deposit sync',e)}
+  };
+  window.portalTickDeposit=portalTickDeposit=function(){
+    clearInterval(portalDepositTimer);
+    portalDepositTimer=setInterval(async()=>{
+      const el=document.querySelector('.portal-countdown[data-exp]');
+      if(el){const ms=new Date(el.dataset.exp)-Date.now();if(ms>0){const sec=Math.max(0,Math.floor(ms/1000));el.textContent=String(Math.floor(sec/60)).padStart(2,'0')+':'+String(sec%60).padStart(2,'0')}else el.textContent='HẾT HẠN'}
+      try{const d=await portalFetch('/api/account/deposits/current'),dep=d?.deposit||null;if(sig(dep)!==lastDepositSig){portalRenderDeposit(dep);if(dep?.status==='approved')await portalRefresh()}}catch(_){ }
+    },3000);
+  };
+  const baseCreate=window.portalCreateDeposit;
+  if(typeof baseCreate==='function')window.portalCreateDeposit=portalCreateDeposit=async function(ev){
+    ev?.preventDefault?.();ev?.stopPropagation?.();
+    const app=document.getElementById('portal-app'),y=app?.scrollTop||0;
+    await baseCreate();
+    requestAnimationFrame(()=>{const box=document.getElementById('portal-deposit-box');if(box&&!box.classList.contains('portal-hidden'))box.scrollIntoView({behavior:'smooth',block:'start'});else if(app)app.scrollTop=y});
+  };
+  // Rebind after old initialization code so no stale handler can win.
+  function rebind(){const b=document.getElementById('portal-deposit-create');if(b){b.type='button';b.onclick=e=>portalCreateDeposit(e)}document.querySelectorAll('#portal-amounts button').forEach(x=>x.type='button')}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',rebind,{once:true});else rebind();
+  // Dynamic game engine labels show policy/base selected by admin.
+  const oldRender=window.renderDynamicGamesV5;
+  if(typeof oldRender==='function')window.renderDynamicGamesV5=function(){oldRender();const rows=Array.isArray(gameConfig?.custom_games)?gameConfig.custom_games:[];document.querySelectorAll('#portal-games .v5-custom-card').forEach((card,i)=>{const g=rows[i];const chips=card.querySelectorAll('.v5-engine-row span');if(g&&chips.length>=3){chips[0].textContent=String(g.algo_policy||'auto').toUpperCase();chips[1].textContent=String(g.base_engine||'auto').toUpperCase();chips[2].textContent='AI '+Number(g.algo_mode||2)}})};
+  const ring=document.createElement('div');ring.className='v11-live-ring';document.body.appendChild(ring);
+})();
+</script>
+
+
+<!-- ===== V12 VIP PRO MAX · AURORA ANIME GLASS ===== -->
+<style id="v12-vip-pro-max">
+:root{--v12-ink:#163643;--v12-muted:#5f7b86;--v12-cyan:#45d9e7;--v12-mint:#8debd8;--v12-lav:#aebcff;--v12-pink:#f1a9d2;--v12-gold:#f4cf7b;--v12-glass:rgba(250,254,255,.76);--v12-line:rgba(255,255,255,.94);--v12-shadow:0 18px 54px rgba(36,82,99,.16),inset 0 1px 0 rgba(255,255,255,.98)}
+body.light #portal-app{background:linear-gradient(180deg,rgba(238,249,251,.84),rgba(246,248,255,.88))!important;color:var(--v12-ink)!important}
+.portal-topbar{background:rgba(250,254,255,.78)!important;border-color:rgba(255,255,255,.94)!important;box-shadow:0 10px 36px rgba(32,75,90,.12)!important}
+.portal-brand strong,.portal-brand b{color:#173743!important}.portal-brand small{color:#62808b!important}
+.portal-page{position:relative;z-index:2}.portal-main{padding-left:14px!important;padding-right:14px!important}
+/* softer readable text, no white-on-white */
+#portal-home h1,#portal-home h2,#portal-home h3,#portal-games h2,#portal-account h2{color:#173744!important;text-shadow:none!important}
+#portal-home p,#portal-home small,#portal-games p,#portal-account p{color:#5b7783!important;text-shadow:none!important}
+.ultra-panel,.truth-card,.account-pro-shell,.account-pro-hero,.info-cell,.game-center-banner{background:rgba(250,254,255,.72)!important;border:1px solid rgba(255,255,255,.92)!important;box-shadow:var(--v12-shadow)!important}
+/* premium brand mark */
+.portal-brand:before{content:'✦';display:grid;place-items:center;width:33px;height:33px;margin-right:8px;border-radius:12px;background:linear-gradient(135deg,#c9fff3,#d9ddff 60%,#ffd9ef);color:#288a98;font-size:15px;box-shadow:0 8px 22px rgba(70,160,180,.16),inset 0 1px 0 white}
+/* Home editorial hero */
+.v12-home-pro{display:grid;grid-template-columns:1.15fr .85fr;gap:12px;margin:10px 0 14px}
+.v12-editorial,.v12-anime-card{position:relative;overflow:hidden;border-radius:29px;border:1px solid var(--v12-line);box-shadow:var(--v12-shadow);background:var(--v12-glass)}
+.v12-editorial{padding:20px;min-height:220px;background:linear-gradient(140deg,rgba(250,255,255,.88),rgba(228,250,247,.74) 52%,rgba(235,237,255,.78))}
+.v12-kicker{display:flex;align-items:center;gap:6px;color:#2e8997;font-size:8px;font-weight:1000;letter-spacing:.15em;text-transform:uppercase}.v12-kicker i{width:7px;height:7px;border-radius:50%;background:#59d9b3;box-shadow:0 0 12px #59d9b3}
+.v12-editorial h2{font:1000 clamp(30px,6vw,54px)/.95 'Barlow Condensed','Be Vietnam Pro',sans-serif!important;margin:14px 0 10px!important;letter-spacing:-.015em}.v12-editorial p{max-width:560px;font:700 11px/1.65 'Be Vietnam Pro',sans-serif!important}
+.v12-proof{display:flex;gap:6px;flex-wrap:wrap;margin-top:14px}.v12-proof span{padding:7px 9px;border-radius:999px;background:rgba(255,255,255,.68);border:1px solid white;color:#3e6975;font-size:7px;font-weight:900}
+.v12-anime-card{min-height:220px;background:#dfeff4 center/cover no-repeat}.v12-anime-card:after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,transparent 30%,rgba(239,250,252,.18) 55%,rgba(244,251,253,.92));pointer-events:none}.v12-anime-caption{position:absolute;z-index:2;left:14px;right:14px;bottom:13px}.v12-anime-caption b{display:block;color:#173d49;font-size:12px}.v12-anime-caption small{color:#66838d!important;font-size:7px!important;font-weight:800}
+.v12-anime-dots{position:absolute;right:12px;top:12px;z-index:3;display:flex;gap:4px}.v12-anime-dots i{width:6px;height:6px;border-radius:99px;background:rgba(255,255,255,.65);border:1px solid rgba(255,255,255,.9)}.v12-anime-dots i.on{width:17px;background:#77e2d0}
+/* Games scale to many providers */
+.v12-game-tools{position:sticky;top:0;z-index:8;margin:-2px 0 11px;padding:8px;border-radius:22px;background:rgba(246,252,254,.83);border:1px solid white;box-shadow:0 9px 30px rgba(37,81,98,.10);backdrop-filter:blur(18px)}
+.v12-game-search{display:flex;gap:7px;align-items:center}.v12-game-search input{flex:1;min-width:0;height:38px;border:1px solid rgba(92,169,180,.18);border-radius:14px;background:rgba(255,255,255,.76);padding:0 12px;color:#173d49;font:800 10px 'Be Vietnam Pro';outline:none}.v12-count{min-width:38px;height:38px;display:grid;place-items:center;border-radius:14px;background:linear-gradient(135deg,#d5fff5,#e5e8ff);color:#366672;font-size:9px;font-weight:1000}
+.v12-filters{display:flex;gap:6px;overflow-x:auto;padding-top:7px;scrollbar-width:none}.v12-filters::-webkit-scrollbar{display:none}.v12-filter{flex:0 0 auto;border:0;padding:7px 10px;border-radius:999px;background:rgba(255,255,255,.68);color:#557680;font:900 7px 'Be Vietnam Pro';box-shadow:inset 0 0 0 1px rgba(100,168,181,.13)}.v12-filter.on{background:linear-gradient(135deg,#c9fff0,#dce4ff);color:#1e5c69;box-shadow:0 5px 14px rgba(60,141,158,.12),inset 0 0 0 1px white}
+#portal-games .ultra-games-grid{grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:12px!important}
+#portal-games .portal-game-card{background:linear-gradient(145deg,rgba(255,255,255,.90),rgba(237,249,251,.76))!important;border-radius:28px!important;border:1px solid rgba(255,255,255,.98)!important;box-shadow:0 17px 42px rgba(38,80,96,.13),inset 0 1px 0 white!important;transition:transform .18s ease,box-shadow .18s ease!important}
+#portal-games .portal-game-card:active{transform:scale(.985)!important}.v12-card-category{display:flex;align-items:center;gap:4px;margin:4px 0 0;color:#6c8790;font-size:6.4px;font-weight:1000;text-transform:uppercase;letter-spacing:.08em}.v12-result-labels{display:flex;gap:4px;margin-top:6px}.v12-result-labels span{flex:1;text-align:center;padding:5px 3px;border-radius:10px;background:rgba(255,255,255,.72);border:1px solid rgba(91,170,183,.13);font-size:6.5px;font-weight:1000;color:#3b6874}.v12-result-labels span:first-child{background:linear-gradient(135deg,rgba(255,230,235,.72),rgba(255,246,235,.78))}.v12-result-labels span:last-child{background:linear-gradient(135deg,rgba(222,248,255,.78),rgba(232,235,255,.74))}
+/* in-game analysis sheet */
+#v12-analysis-btn{position:fixed;right:12px;bottom:78px;z-index:1000005;width:46px;height:46px;border:1px solid white;border-radius:17px;background:linear-gradient(135deg,rgba(239,255,252,.94),rgba(225,231,255,.94));box-shadow:0 12px 28px rgba(31,82,98,.18);color:#285c69;font-size:18px;display:none;place-items:center}body.portal-game-mode #v12-analysis-btn{display:grid}
+#v12-analysis-sheet{position:fixed;z-index:1000010;left:10px;right:10px;bottom:10px;max-width:620px;margin:auto;border-radius:28px;background:rgba(248,253,255,.94);border:1px solid white;box-shadow:0 24px 70px rgba(24,59,75,.25);backdrop-filter:blur(28px);padding:14px;transform:translateY(calc(100% + 30px));opacity:0;pointer-events:none;transition:.24s ease;color:#173c48}#v12-analysis-sheet.on{transform:none;opacity:1;pointer-events:auto}
+.v12-as-head{display:flex;align-items:center;gap:10px}.v12-as-icon{width:38px;height:38px;display:grid;place-items:center;border-radius:14px;background:linear-gradient(135deg,#d5fff5,#dce2ff)}.v12-as-copy{flex:1}.v12-as-copy b{display:block;font-size:11px}.v12-as-copy small{color:#6b858f;font-size:7px}.v12-as-x{width:35px;height:35px;border:0;border-radius:12px;background:#edf6f8;color:#55727d;font-weight:1000}.v12-as-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:10px}.v12-as-stat{padding:9px 6px;border-radius:15px;background:rgba(255,255,255,.74);border:1px solid rgba(99,169,181,.14);text-align:center}.v12-as-stat small{display:block;color:#78909a;font-size:6px;font-weight:900}.v12-as-stat b{display:block;margin-top:3px;color:#214d59;font-size:10px}.v12-as-reason{margin-top:8px;padding:10px 12px;border-radius:16px;background:linear-gradient(135deg,rgba(222,250,245,.72),rgba(232,237,255,.72));color:#486b76;font-size:8px;font-weight:750;line-height:1.55}
+/* calculation state */
+#robot.v12-calculating #pred{color:#2e6b78!important;-webkit-text-stroke:0!important;text-shadow:none!important;font-size:clamp(.74rem,1.8vw,1.1rem)!important;animation:v12calc .75s ease-in-out infinite}#robot.v12-calculating .pfill{background:linear-gradient(90deg,#6debd5,#9db7ff,#f0acd3)!important;animation:v12bar 1s ease-in-out infinite}@keyframes v12calc{50%{opacity:.42;letter-spacing:3px}}@keyframes v12bar{0%,100%{filter:brightness(.9)}50%{filter:brightness(1.25)}}
+/* responsive */
+@media(max-width:980px){#portal-games .ultra-games-grid{grid-template-columns:repeat(3,minmax(0,1fr))!important}}
+@media(max-width:680px){.v12-home-pro{grid-template-columns:1fr}.v12-anime-card{min-height:180px}.v12-editorial{min-height:0;padding:17px}#portal-games .ultra-games-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:9px!important}.v12-as-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:370px){#portal-games .ultra-games-grid{gap:7px!important}.v12-game-tools{margin-left:-2px;margin-right:-2px}.v12-editorial h2{font-size:31px!important}}
+@media(prefers-reduced-motion:reduce){#robot.v12-calculating #pred,#robot.v12-calculating .pfill{animation:none!important}}
+</style>
+<script id="v12-vip-pro-max-js">
+(()=>{
+  const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+  const anime=[
+    'https://cdn.pixabay.com/photo/2023/01/12/10/20/anime-7713786_640.jpg',
+    'https://cdn.pixabay.com/photo/2023/01/27/02/54/fashion-cyberpunk-7747609_640.jpg',
+    'https://cdn.pixabay.com/photo/2023/01/27/02/53/fashion-cyberpunk-7747606_640.jpg'
+  ];
+  let animeIdx=0,animeTimer=null,lastPrediction=null,calcToken=0;
+  const categoryName=v=>({'tai-xiu':'Tài Xỉu','tai_xiu':'Tài Xỉu','sicbo':'Sicbo','xoc-dia':'Xóc Đĩa','xocdia':'Xóc Đĩa','casino':'Casino','baccarat':'Baccarat','roulette':'Roulette','other':'Khác'}[String(v||'').toLowerCase()]||String(v||'Khác').replace(/-/g,' '));
+  function builtMeta(card,i){const name=card.querySelector('h3')?.textContent?.trim()||'';return name==='SUNWIN'?{cat:'tai-xiu',type:'tx',a:'TÀI',b:'XỈU'}:name==='MAX789'?{cat:'tai-xiu',type:'tx',a:'TÀI',b:'XỈU'}:{cat:'tai-xiu',type:'tx',a:'TÀI',b:'XỈU'}}
+  function customForCard(card){const slug=card.querySelector('[data-enter-table^="custom__"]')?.dataset.enterTable?.replace(/^custom__/,'');return (gameConfig?.custom_games||[]).find(g=>g.slug===slug)||null}
+  function decorateCards(){
+    $$('#portal-games .portal-game-card').forEach((card,i)=>{
+      const g=card.classList.contains('v5-custom-card')?customForCard(card):null;const m=g||builtMeta(card,i);
+      const cat=(g?.category||m.cat||'other').toLowerCase();card.dataset.v12Category=cat;card.dataset.v12Name=(g?.name||card.querySelector('h3')?.textContent||'').toLowerCase();
+      const copy=card.querySelector('.ultra-card-copy');if(copy){
+        let c=copy.querySelector('.v12-card-category');if(!c){c=document.createElement('div');c.className='v12-card-category';copy.appendChild(c)}c.textContent=`${g?.icon||'✦'} ${categoryName(cat)} · ${(g?.game_type||m.type||'tx').toUpperCase()}`;
+        let r=copy.querySelector('.v12-result-labels');if(!r){r=document.createElement('div');r.className='v12-result-labels';copy.appendChild(r)}r.innerHTML=`<span>${g?.result_a_label||m.a||'A'}</span><span>${g?.result_b_label||m.b||'B'}</span>`;
+      }
+    });
+    applyFilter();
+  }
+  function installHome(){
+    const home=$('#portal-home');if(!home||$('.v12-home-pro',home))return;
+    const host=home.querySelector('.ultra-page-title')||home.firstElementChild;
+    const box=document.createElement('section');box.className='v12-home-pro';box.innerHTML=`<div class="v12-editorial"><div class="v12-kicker"><i></i> PHÂN TÍCH PHIÊN THEO THỜI GIAN THỰC</div><h2>Đọc dữ liệu rõ ràng.<br>Ra quyết định tỉnh táo.</h2><p>TAIXIUTOOL gom lịch sử từng game, tách nguồn riêng và hiển thị trạng thái phân tích ngay khi phiên mới xuất hiện. Bạn luôn xem được dữ liệu, độ nhiễu và lịch sử đã chốt thay vì chỉ nhìn một con số.</p><div class="v12-proof"><span>● Nguồn phiên thật</span><span>◫ Lịch sử minh bạch</span><span>✦ Engine theo từng game</span><span>↻ Tự hiệu chỉnh</span></div></div><div class="v12-anime-card"><div class="v12-anime-dots"><i class="on"></i><i></i><i></i></div><div class="v12-anime-caption"><b>Aurora Gaming Collection</b><small>Giao diện hình ảnh · game center mở rộng · liquid glass</small></div></div>`;
+    host?.insertAdjacentElement('afterend',box);showAnime(0);clearInterval(animeTimer);animeTimer=setInterval(()=>showAnime(animeIdx+1),5200);
+  }
+  function showAnime(i){const card=$('.v12-anime-card');if(!card)return;animeIdx=(i+anime.length)%anime.length;card.style.backgroundImage=`url("${anime[animeIdx]}")`;$$('.v12-anime-dots i').forEach((d,k)=>d.classList.toggle('on',k===animeIdx))}
+  let activeCat='all';function installGameTools(){const page=$('#portal-games');if(!page||$('.v12-game-tools',page))return;const grid=page.querySelector('.ultra-games-grid');if(!grid)return;const tools=document.createElement('div');tools.className='v12-game-tools';tools.innerHTML=`<div class="v12-game-search"><input id="v12-game-search" placeholder="Tìm game, Sicbo, Baccarat, Xóc Đĩa..."><span class="v12-count" id="v12-game-count">0</span></div><div class="v12-filters"><button class="v12-filter on" data-cat="all">TẤT CẢ</button><button class="v12-filter" data-cat="tai-xiu">TÀI XỈU</button><button class="v12-filter" data-cat="sicbo">SICBO</button><button class="v12-filter" data-cat="xoc-dia">XÓC ĐĨA</button><button class="v12-filter" data-cat="casino">CASINO</button><button class="v12-filter" data-cat="other">KHÁC</button></div>`;grid.before(tools);$('#v12-game-search').addEventListener('input',applyFilter);$$('.v12-filter').forEach(b=>b.onclick=()=>{$$('.v12-filter').forEach(x=>x.classList.remove('on'));b.classList.add('on');activeCat=b.dataset.cat;applyFilter()})}
+  function applyFilter(){const q=($('#v12-game-search')?.value||'').trim().toLowerCase();let n=0;$$('#portal-games .portal-game-card').forEach(card=>{const cat=card.dataset.v12Category||'other',name=card.dataset.v12Name||'';const catOk=activeCat==='all'||cat===activeCat||(activeCat==='casino'&&['baccarat','roulette','casino'].includes(cat));const ok=catOk&&(!q||name.includes(q)||categoryName(cat).toLowerCase().includes(q));card.style.display=ok?'':'none';if(ok)n++});if($('#v12-game-count'))$('#v12-game-count').textContent=n}
+  function installAnalysis(){if($('#v12-analysis-btn'))return;document.body.insertAdjacentHTML('beforeend',`<button id="v12-analysis-btn" aria-label="Phân tích chi tiết">📊</button><section id="v12-analysis-sheet"><div class="v12-as-head"><div class="v12-as-icon">📈</div><div class="v12-as-copy"><b id="v12-as-title">Phân tích phiên</b><small id="v12-as-sub">Chờ dữ liệu...</small></div><button class="v12-as-x">×</button></div><div class="v12-as-grid"><div class="v12-as-stat"><small>TRẠNG THÁI CẦU</small><b id="v12-as-phase">-</b></div><div class="v12-as-stat"><small>NHỊP HIỆN TẠI</small><b id="v12-as-streak">-</b></div><div class="v12-as-stat"><small>ĐẢO 20 PHIÊN</small><b id="v12-as-change">-</b></div><div class="v12-as-stat"><small>ĐÚNG 24 LẦN CHỐT</small><b id="v12-as-acc">-</b></div></div><div class="v12-as-reason" id="v12-as-reason">Khi có phiên mới, hệ thống sẽ cập nhật mô tả cầu và các thống kê đã chốt tại đây.</div></section>`);$('#v12-analysis-btn').onclick=()=>$('#v12-analysis-sheet').classList.toggle('on');$('.v12-as-x').onclick=()=>$('#v12-analysis-sheet').classList.remove('on')}
+  function labelSide(side,p){const l=p?.labels||p?.analysis?.labels||{};return side==='T'?(l.a||'TÀI'):side==='X'?(l.b||'XỈU'):'TÍN HIỆU YẾU'}
+  function renderAnalysis(p){lastPrediction=p;const a=p?.analysis||{},l=p?.labels||a.labels||{};if($('#v12-as-title'))$('#v12-as-title').textContent=`#${p.session_id||'-'} · ${p.game?.toUpperCase?.()||'GAME'}`;if($('#v12-as-sub'))$('#v12-as-sub').textContent=`${labelSide('T',p)} / ${labelSide('X',p)} · ${p.confidence||0}% · N${p.noise??'-'}`;if($('#v12-as-phase'))$('#v12-as-phase').textContent=a.phase||p.regime||'-';if($('#v12-as-streak'))$('#v12-as-streak').textContent=a.streak_length?`${labelSide(a.streak_side,p)} ×${a.streak_length}`:'-';if($('#v12-as-change'))$('#v12-as-change').textContent=a.change_rate_20!=null?`${a.change_rate_20}%`:'-';if($('#v12-as-acc'))$('#v12-as-acc').textContent=a.settled_accuracy_24!=null?`${a.settled_accuracy_24}%`:'WARMUP';if($('#v12-as-reason'))$('#v12-as-reason').textContent=`${p.pattern||'MULTI-PATTERN'} · ${p.regime||'ADAPTIVE'} · ${p.reason||''}`}
+  const baseShow=window.showPredictionUI;
+  if(typeof baseShow==='function')window.showPredictionUI=showPredictionUI=function(p){
+    const robot=$('#robot'),pred=$('#pred'),sid=$('#sid'),conf=$('#conf');const newSession=String(p?.session_id||'')!==String(lastPrediction?.session_id||'');renderAnalysis(p);
+    const token=++calcToken;if(newSession&&robot){robot.classList.add('v12-calculating');if(sid)sid.textContent='#'+p.session_id;if(pred){pred.innerHTML='ĐANG TÍNH <span class="v13-calc-dots"><i></i><i></i><i></i></span>';pred.className='load'}if(conf){conf.className='';conf.textContent='ĐANG PHÂN TÍCH CẦU · 1–2 GIÂY'}const fill=$('#pfill');if(fill)fill.style.width='58%';setTimeout(()=>{if(token!==calcToken)return;robot.classList.remove('v12-calculating');baseShow(p);const pr=$('#pred');if(pr&&p.side)pr.textContent=labelSide(p.side,p);renderAnalysis(p)},1250)}else{baseShow(p);if(pred&&p.side)pred.textContent=labelSide(p.side,p);renderAnalysis(p)}};
+  const baseHist=window.renderHist;if(typeof baseHist==='function')window.renderHist=renderHist=function(){const r=baseHist.apply(this,arguments);const g=(gameConfig?.custom_games||[]).find(x=>x.table===currentTable);if(g){$$('#hist .r-pred.tai,#hist .r-act.tai').forEach(x=>x.textContent=g.result_a_label||'A');$$('#hist .r-pred.xiu,#hist .r-act.xiu').forEach(x=>x.textContent=g.result_b_label||'B')}return r};
+  const oldDyn=window.renderDynamicGamesV5;if(typeof oldDyn==='function')window.renderDynamicGamesV5=function(){const r=oldDyn.apply(this,arguments);decorateCards();return r};
+  function polishCopy(){const home=$('#portal-home');if(!home)return;const truth=home.querySelector('.truth-card');if(truth){const b=truth.querySelector('strong,h2,h3');if(b)b.textContent='Phân tích để tham khảo, không phải cam kết kết quả';const p=truth.querySelector('p');if(p)p.textContent='Dữ liệu được tách theo từng game và cập nhật theo phiên. Khi nguồn chậm, hệ thống sẽ chờ thay vì tự tạo phiên.'}}
+  function init(){installHome();installGameTools();installAnalysis();polishCopy();decorateCards();setTimeout(decorateCards,700);setTimeout(decorateCards,1800)}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
+})();
+</script>
+
+
+
+<!-- ===== V13 NEON STICKER MOTION · HOLO LOADING ===== -->
+<style id="v13-neon-sticker-motion">
+:root{--v13-ink:#143743;--v13-cyan:#50ddea;--v13-mint:#7ce9cb;--v13-lav:#a9b8ff;--v13-pink:#f2afd7;--v13-glass:rgba(250,254,255,.76);--v13-line:rgba(255,255,255,.96);--v13-shadow:0 18px 54px rgba(40,88,104,.15),inset 0 1px 0 rgba(255,255,255,.98)}
+body.light #portal-app{background:radial-gradient(circle at 20% 8%,rgba(148,243,227,.24),transparent 26%),radial-gradient(circle at 84% 12%,rgba(180,190,255,.22),transparent 28%),radial-gradient(circle at 50% 82%,rgba(245,186,221,.18),transparent 30%),linear-gradient(180deg,rgba(239,249,252,.86),rgba(246,248,255,.9))!important}
+/* animated ambient sticker layer */
+#v13-fx-layer{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden;contain:layout paint}
+body.portal-game-mode #v13-fx-layer{display:none}
+.v13-float{position:absolute;display:grid;place-items:center;width:42px;height:42px;border-radius:16px;background:linear-gradient(145deg,rgba(255,255,255,.68),rgba(236,249,252,.42));border:1px solid rgba(255,255,255,.92);box-shadow:0 10px 24px rgba(50,106,124,.11),inset 0 1px 0 white;font-size:20px;opacity:.62;filter:saturate(.95);animation:v13Float var(--dur,9s) ease-in-out infinite alternate;transform:translate3d(0,0,0) rotate(var(--r,0deg))}
+.v13-float.s{width:34px;height:34px;border-radius:13px;font-size:16px;opacity:.5}.v13-float.l{width:48px;height:48px;border-radius:18px;font-size:23px;opacity:.7}
+@keyframes v13Float{0%{transform:translate3d(0,0,0) rotate(var(--r,0deg)) scale(.96)}50%{transform:translate3d(var(--dx,10px),-10px,0) rotate(calc(var(--r,0deg) + 7deg)) scale(1.04)}100%{transform:translate3d(calc(var(--dx,10px) * -.65),8px,0) rotate(calc(var(--r,0deg) - 6deg)) scale(.98)}}
+/* sticker rail */
+.v13-sticker-rail{display:flex;gap:7px;overflow-x:auto;padding:2px 1px 9px;scrollbar-width:none}.v13-sticker-rail::-webkit-scrollbar{display:none}.v13-sticker{flex:0 0 auto;display:flex;align-items:center;gap:7px;padding:8px 10px;border-radius:16px;background:rgba(255,255,255,.66);border:1px solid rgba(255,255,255,.96);box-shadow:0 8px 20px rgba(50,102,118,.09);color:#315e69;font:900 7px 'Be Vietnam Pro',sans-serif;white-space:nowrap;animation:v13StickerPulse 4.2s ease-in-out infinite}.v13-sticker:nth-child(2n){animation-delay:-1.3s}.v13-sticker:nth-child(3n){animation-delay:-2.4s}.v13-sticker i{font-style:normal;font-size:16px;filter:drop-shadow(0 2px 5px rgba(74,115,136,.14))}@keyframes v13StickerPulse{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
+/* pro hero badge + moving sheen */
+.v12-editorial:after,.v12-anime-card:before,#portal-games .portal-game-card:after{content:'';position:absolute;inset:-2px;pointer-events:none;background:linear-gradient(115deg,transparent 22%,rgba(255,255,255,.34) 42%,transparent 61%);transform:translateX(-110%);animation:v13Sheen 7.4s ease-in-out infinite}
+@keyframes v13Sheen{0%,67%{transform:translateX(-110%)}82%,100%{transform:translateX(110%)}}
+.v13-pro-badge{display:inline-flex;align-items:center;gap:6px;padding:7px 10px;border-radius:999px;background:linear-gradient(135deg,rgba(216,255,246,.86),rgba(226,231,255,.86),rgba(255,229,244,.86));border:1px solid white;color:#2f6672;font:1000 7px 'Be Vietnam Pro';box-shadow:0 8px 20px rgba(62,126,146,.11)}.v13-pro-badge .dot{width:6px;height:6px;border-radius:50%;background:#5bddb9;box-shadow:0 0 12px #5bddb9;animation:v13Dot 1.6s ease-in-out infinite}@keyframes v13Dot{50%{opacity:.35;transform:scale(.78)}}
+/* holo loading overlay */
+#v13-loader{position:fixed;inset:0;z-index:2147483638;display:grid;place-items:center;padding:20px;background:linear-gradient(180deg,rgba(235,248,252,.76),rgba(244,246,255,.82));backdrop-filter:blur(20px) saturate(1.25);-webkit-backdrop-filter:blur(20px) saturate(1.25);opacity:0;pointer-events:none;transition:opacity .2s ease}
+#v13-loader.on{opacity:1;pointer-events:auto}.v13-loader-card{width:min(90vw,360px);padding:21px 18px 17px;border-radius:30px;background:rgba(250,254,255,.84);border:1px solid white;box-shadow:0 28px 80px rgba(35,83,101,.22),inset 0 1px 0 white;text-align:center;position:relative;overflow:hidden}.v13-loader-card:before{content:'';position:absolute;inset:-40%;background:conic-gradient(from 0deg,transparent,rgba(89,221,234,.16),transparent,rgba(171,187,255,.17),transparent,rgba(242,175,215,.14),transparent);animation:v13Spin 4.8s linear infinite;pointer-events:none}.v13-loader-core{position:relative;z-index:2}.v13-orbit{width:88px;height:88px;margin:0 auto 12px;position:relative}.v13-orbit:before,.v13-orbit:after{content:'';position:absolute;border-radius:50%;inset:0;border:2px solid rgba(83,205,219,.22)}.v13-orbit:before{border-top-color:#54dce9;border-right-color:#9eafff;animation:v13Spin 1.15s linear infinite}.v13-orbit:after{inset:12px;border-bottom-color:#f0afd5;border-left-color:#7ce9cb;animation:v13Spin 1.55s linear infinite reverse}.v13-orbit .orb{position:absolute;inset:29px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(135deg,#d9fff6,#e5e8ff 58%,#ffe4f3);box-shadow:0 0 26px rgba(87,206,224,.25);font-size:21px;animation:v13Orb 1.25s ease-in-out infinite}@keyframes v13Spin{to{transform:rotate(360deg)}}@keyframes v13Orb{50%{transform:scale(1.08);filter:brightness(1.04)}}
+.v13-loader-title{font:1000 17px 'Barlow Condensed','Be Vietnam Pro';color:#1b4a57;letter-spacing:.03em}.v13-loader-sub{margin-top:4px;color:#6a8791;font:800 8px/1.5 'Be Vietnam Pro'}.v13-loader-steps{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-top:14px}.v13-loader-steps span{padding:6px 4px;border-radius:999px;background:#edf6f8;color:#78929b;font:900 6.5px 'Be Vietnam Pro';transition:.22s}.v13-loader-steps span.on{background:linear-gradient(135deg,#d6fff5,#e4e8ff);color:#2e6773;box-shadow:0 5px 14px rgba(69,144,161,.1)}.v13-loader-line{height:5px;border-radius:999px;background:#e7f0f3;margin-top:11px;overflow:hidden}.v13-loader-line i{display:block;height:100%;width:0;background:linear-gradient(90deg,#67e2cc,#6cd7ea,#9aaeff,#efacd4);border-radius:inherit;transition:width .28s ease;box-shadow:0 0 12px rgba(98,209,225,.28)}
+/* robot calculating V13 */
+#robot.v13-calculating .overlay,#robot.v12-calculating .overlay{background:linear-gradient(145deg,rgba(248,254,255,.82),rgba(231,246,251,.62))!important;border-radius:18px!important;box-shadow:0 10px 28px rgba(27,74,90,.18),inset 0 1px 0 white!important;border:1px solid rgba(255,255,255,.94)!important}
+#robot.v13-calculating #pred,#robot.v12-calculating #pred{color:#2d6370!important;text-shadow:none!important;-webkit-text-stroke:0!important;animation:v13CalcText 1s ease-in-out infinite!important}#robot.v13-calculating #conf,#robot.v12-calculating #conf{color:#67838d!important;text-shadow:none!important;-webkit-text-stroke:0!important}.v13-calc-dots{display:inline-flex;gap:4px;margin-left:4px;vertical-align:middle}.v13-calc-dots i{width:4px;height:4px;border-radius:50%;background:#5ad9cf;display:block;animation:v13MiniDot .75s ease-in-out infinite}.v13-calc-dots i:nth-child(2){animation-delay:.12s}.v13-calc-dots i:nth-child(3){animation-delay:.24s}@keyframes v13MiniDot{50%{transform:translateY(-4px);opacity:.35}}@keyframes v13CalcText{50%{opacity:.55;letter-spacing:2.8px}}
+/* more compact premium game cards */
+#portal-games .portal-game-card{overflow:hidden!important}#portal-games .ultra-game-img{border-radius:20px!important;margin:7px!important;width:calc(100% - 14px)!important;height:118px!important;box-shadow:0 8px 24px rgba(35,79,96,.10)}.ultra-live{border-radius:999px!important;padding:6px 8px!important;background:rgba(246,255,252,.88)!important;color:#21836f!important;border:1px solid white!important;box-shadow:0 7px 18px rgba(52,124,109,.12)!important}.v12-result-labels span{border-radius:12px!important}.ultra-mode-row button{border-radius:15px!important;min-height:43px!important}
+/* small animated sticker on each card */
+.v13-card-sticker{position:absolute;right:10px;top:10px;z-index:5;width:31px;height:31px;border-radius:12px;display:grid;place-items:center;background:rgba(255,255,255,.82);border:1px solid white;box-shadow:0 8px 18px rgba(50,103,119,.11);font-size:15px;animation:v13StickerPulse 3.6s ease-in-out infinite}
+/* section divider */
+.v13-section-label{display:flex;align-items:center;gap:8px;margin:9px 2px 7px;color:#52737e;font:1000 7px 'Be Vietnam Pro';letter-spacing:.12em;text-transform:uppercase}.v13-section-label:after{content:'';height:1px;flex:1;background:linear-gradient(90deg,rgba(89,186,201,.25),transparent)}
+@media(max-width:680px){.v13-float:nth-child(n+7){display:none}.v13-loader-card{width:min(92vw,330px)}#portal-games .ultra-game-img{height:96px!important}.v13-sticker{padding:7px 9px}.v13-sticker i{font-size:14px}}
+@media(prefers-reduced-motion:reduce){.v13-float,.v13-sticker,.v12-editorial:after,.v12-anime-card:before,#portal-games .portal-game-card:after,.v13-loader-card:before,.v13-orbit:before,.v13-orbit:after,.v13-orbit .orb,.v13-calc-dots i{animation:none!important}}
+</style>
+<script id="v13-neon-sticker-motion-js">
+(()=>{
+  const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+  const stickerSet=['✨','🌸','🎲','🃏','⚡','🎯','👾','🫧','💎','♠️','🌙','🎮'];
+  const cardIcons=['🎲','👑','💎','🃏','🎯','⚡','🌸','🪩','♣️','🎮'];
+  let loadTimer=null,loadStepTimer=null,calcSeq=0;
+  function installFx(){if($('#v13-fx-layer'))return;const fx=document.createElement('div');fx.id='v13-fx-layer';const pos=[[4,18,'s'],[88,13,''],[8,54,''],[92,63,'s'],[14,83,'l'],[84,88,''],[47,11,'s'],[50,91,'s'],[3,73,'s'],[94,37,'s']];fx.innerHTML=pos.map((p,i)=>`<span class="v13-float ${p[2]}" style="left:${p[0]}%;top:${p[1]}%;--dur:${7.5+(i%4)*1.7}s;--dx:${8+(i%5)*4}px;--r:${-10+i*3}deg">${stickerSet[i%stickerSet.length]}</span>`).join('');document.body.appendChild(fx)}
+  function installLoader(){if($('#v13-loader'))return;document.body.insertAdjacentHTML('beforeend',`<div id="v13-loader"><div class="v13-loader-card"><div class="v13-loader-core"><div class="v13-orbit"><div class="orb">✦</div></div><div class="v13-loader-title" id="v13-loader-title">Đang chuẩn bị không gian game</div><div class="v13-loader-sub" id="v13-loader-sub">Đồng bộ giao diện, nguồn dữ liệu và lớp robot.</div><div class="v13-loader-steps"><span>KHỞI TẠO</span><span>ĐỒNG BỘ</span><span>SẴN SÀNG</span></div><div class="v13-loader-line"><i></i></div></div></div></div>`)}
+  function showLoader(title='Đang chuẩn bị không gian game',sub='Đồng bộ giao diện, nguồn dữ liệu và lớp robot.',ms=1500){installLoader();clearTimeout(loadTimer);clearInterval(loadStepTimer);const root=$('#v13-loader'),line=$('#v13-loader .v13-loader-line i'),steps=$$('#v13-loader .v13-loader-steps span');$('#v13-loader-title').textContent=title;$('#v13-loader-sub').textContent=sub;root.classList.add('on');steps.forEach(x=>x.classList.remove('on'));if(line)line.style.width='8%';let n=0;steps[0]?.classList.add('on');loadStepTimer=setInterval(()=>{n=Math.min(2,n+1);steps.forEach((x,i)=>x.classList.toggle('on',i<=n));if(line)line.style.width=(34+n*33)+'%'},Math.max(250,ms/3));loadTimer=setTimeout(()=>hideLoader(),ms)}
+  function hideLoader(){clearInterval(loadStepTimer);const root=$('#v13-loader');if(root){const line=$('#v13-loader .v13-loader-line i');if(line)line.style.width='100%';setTimeout(()=>root.classList.remove('on'),130)}}
+  function installHomeRail(){const home=$('#portal-home');if(!home||$('.v13-sticker-rail',home))return;const anchor=home.querySelector('.v12-home-pro')||home.querySelector('.ultra-page-title');const wrap=document.createElement('div');wrap.innerHTML=`<div class="v13-section-label">Bộ công cụ trực quan</div><div class="v13-sticker-rail"><span class="v13-sticker"><i>⚡</i> Đồng bộ realtime</span><span class="v13-sticker"><i>🎯</i> Theo dõi nhịp cầu</span><span class="v13-sticker"><i>🧠</i> Tự hiệu chỉnh</span><span class="v13-sticker"><i>📊</i> Thống kê đã chốt</span><span class="v13-sticker"><i>🫧</i> Liquid Glass UI</span><span class="v13-sticker"><i>🌸</i> Aurora Motion</span><span class="v13-sticker"><i>💎</i> Multi-game ready</span></div>`;anchor?.insertAdjacentElement('afterend',wrap)}
+  function decorateCards(){const cards=$$('#portal-games .portal-game-card');cards.forEach((card,i)=>{if(!card.querySelector('.v13-card-sticker')){const s=document.createElement('span');s.className='v13-card-sticker';s.textContent=cardIcons[i%cardIcons.length];card.appendChild(s)}})}
+  function installGameLabel(){const page=$('#portal-games');if(!page||$('.v13-section-label',page))return;const tools=page.querySelector('.v12-game-tools');if(!tools)return;const d=document.createElement('div');d.className='v13-section-label';d.textContent='Kho game · mở rộng tự động theo danh mục';tools.insertAdjacentElement('afterend',d)}
+  function bindLoaderClicks(){document.addEventListener('click',e=>{const btn=e.target.closest('.portal-mode-btn,[data-enter-game],.portal-game-card');if(!btn)return;if(btn.closest('#portal-games'))showLoader('Đang mở game','Đồng bộ đúng bàn chơi và chuẩn bị robot nổi trên game.',1550)},true);const back=$('#game-back-btn');if(back)back.addEventListener('click',()=>showLoader('Đang quay lại Game Center','Đóng lớp game và khôi phục giao diện.',720),true)}
+  function wrapPageSwitch(){const old=window.portalSetPage;if(typeof old!=='function'||old.__v13)return;const f=function(page){if(!document.body.classList.contains('portal-game-mode')){const names={home:'Trang chủ',games:'Kho game',deposit:'Nạp tiền',keys:'Mua key',account:'Tài khoản'};showLoader('Đang mở '+(names[page]||'trang'),'Sắp xếp nội dung và đồng bộ dữ liệu hiển thị.',420)}return old.apply(this,arguments)};f.__v13=true;window.portalSetPage=f}
+  function upgradeCalculation(){const prev=window.showPredictionUI;if(typeof prev!=='function'||prev.__v13)return;const f=function(p){const lastSid=String(window.__v13_last_sid||'');const sid=String(p?.session_id||'');const isNew=sid&&sid!==lastSid;window.__v13_last_sid=sid;if(!isNew)return prev.apply(this,arguments);const my=++calcSeq;const robot=$('#robot'),pred=$('#pred'),conf=$('#conf'),fill=$('#pfill');robot?.classList.add('v13-calculating');if(pred){pred.className='load';pred.innerHTML='ĐANG TÍNH <span class="v13-calc-dots"><i></i><i></i><i></i></span>'}if(conf){conf.className='';conf.textContent='Đang đọc nhịp cầu · so sánh phiên mới / phiên cũ'}if(fill)fill.style.width='42%';setTimeout(()=>{if(my!==calcSeq)return;if(fill)fill.style.width='74%'},520);setTimeout(()=>{if(my!==calcSeq)return;robot?.classList.remove('v13-calculating');prev.call(this,p)},1250)};f.__v13=true;window.showPredictionUI=f}
+  function addProBadge(){const ed=$('.v12-editorial');if(ed&&!ed.querySelector('.v13-pro-badge'))ed.insertAdjacentHTML('afterbegin','<span class="v13-pro-badge"><i class="dot"></i> VIP PRO MAX · MOTION UI</span>')}
+  function init(){installFx();installLoader();installHomeRail();installGameLabel();decorateCards();addProBadge();wrapPageSwitch();bindLoaderClicks();setTimeout(decorateCards,700);setTimeout(decorateCards,1700);setTimeout(()=>hideLoader(),120)}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
+})();
+</script>
+<!-- ===== V14 MULTI-GAME INTELLIGENCE MAX ===== -->
+<style id="v14-multigame-max-css">
+:root{--v14-aqua:#45e8df;--v14-sky:#77a7ff;--v14-violet:#a881ff;--v14-rose:#f3a0c6;--v14-ink:#153947;--v14-muted:#64808b}
+#portal-games [data-game="custom__sunwin-sicbo"]{background:linear-gradient(145deg,rgba(255,251,234,.96),rgba(238,247,255,.91))!important}
+#portal-games [data-game="custom__lc79-xocdia"]{background:linear-gradient(145deg,rgba(232,255,249,.96),rgba(237,246,255,.91))!important}
+#portal-games [data-game="custom__68gb-hu"]{background:linear-gradient(145deg,rgba(232,255,245,.96),rgba(240,251,255,.92))!important}
+#portal-games [data-game="custom__68gb-md5"]{background:linear-gradient(145deg,rgba(255,239,242,.96),rgba(246,242,255,.92))!important}
+#portal-games .v14-game-ribbon{position:absolute;left:16px;top:16px;z-index:9;padding:6px 9px;border-radius:999px;background:rgba(255,255,255,.91);border:1px solid white;box-shadow:0 8px 20px rgba(35,80,96,.12);font:1000 7px/1 system-ui;color:#2d6571;letter-spacing:.08em;-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+#portal-games .v14-api-dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:4px;background:#2fd99d;box-shadow:0 0 9px rgba(47,217,157,.55)}
+#portal-games .v14-learning{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:7px}.v14-learning span{padding:5px 4px;border-radius:10px;text-align:center;background:rgba(255,255,255,.72);border:1px solid rgba(255,255,255,.96);color:#47707b;font:900 6.3px/1 system-ui}
+.v14-intel-strip{display:grid;grid-template-columns:1.25fr .75fr;gap:8px;margin:9px 0 12px}.v14-intel-main,.v14-intel-side{border-radius:22px;background:linear-gradient(145deg,rgba(255,255,255,.84),rgba(235,249,251,.70));border:1px solid white;box-shadow:0 13px 34px rgba(37,80,96,.10),inset 0 1px 0 white;padding:13px}.v14-intel-main small,.v14-intel-side small{display:block;color:#57919c;font:1000 6.8px/1 system-ui;letter-spacing:.12em}.v14-intel-main b{display:block;margin-top:5px;color:#163c49;font:1000 17px/1.1 system-ui}.v14-intel-main p{margin:6px 0 0;color:#657f89;font:750 9px/1.45 system-ui}.v14-intel-side b{display:block;margin-top:6px;color:#1e796f;font:1000 14px/1 system-ui}.v14-intel-side p{margin:6px 0 0;color:#6b8189;font:750 8px/1.4 system-ui}
+#v14-analysis-stage{display:none;position:absolute;inset:0;overflow:hidden;background:linear-gradient(145deg,#eafafb,#eef2ff)}body.v14-analysis-only #v14-analysis-stage{display:block}#v14-analysis-stage:before{content:"";position:absolute;inset:-15%;background:radial-gradient(circle at 16% 20%,rgba(66,232,216,.28),transparent 30%),radial-gradient(circle at 84% 25%,rgba(155,119,255,.22),transparent 33%),radial-gradient(circle at 54% 90%,rgba(241,130,165,.17),transparent 34%);filter:blur(8px)}
+.v14-stage-card{position:absolute;left:50%;top:48%;transform:translate(-50%,-50%);width:min(86vw,460px);padding:18px;border-radius:30px;background:rgba(250,254,255,.82);border:1px solid rgba(255,255,255,.96);box-shadow:0 28px 80px rgba(35,74,92,.18),inset 0 1px 0 white;-webkit-backdrop-filter:blur(26px);backdrop-filter:blur(26px);text-align:center;color:var(--v14-ink)}
+.v14-stage-logo{width:116px;height:116px;margin:0 auto 12px;border-radius:27px;object-fit:cover;background:white;box-shadow:0 13px 35px rgba(40,75,94,.14)}.v14-stage-card h2{font:1000 30px/1 'Barlow Condensed',system-ui;margin:3px 0 7px}.v14-stage-card p{margin:0;color:var(--v14-muted);font:750 11px/1.55 system-ui}.v14-stage-pills{display:flex;justify-content:center;gap:6px;flex-wrap:wrap;margin-top:13px}.v14-stage-pills span{padding:7px 9px;border-radius:999px;background:rgba(255,255,255,.80);border:1px solid white;color:#3f6d78;font:900 7px/1 system-ui}.v14-stage-pills i{width:6px;height:6px;border-radius:50%;display:inline-block;background:#31d99c;margin-right:4px;box-shadow:0 0 8px rgba(49,217,156,.55)}
+#v14-extra-analysis{display:none;margin-top:9px}.v14-extra-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}.v14-extra-box{min-height:76px;padding:10px;border-radius:17px;background:linear-gradient(145deg,rgba(255,255,255,.85),rgba(232,248,250,.70));border:1px solid white;box-shadow:inset 0 1px 0 white}.v14-extra-box small{display:block;color:#668993;font:1000 6.5px/1 system-ui;letter-spacing:.09em}.v14-extra-box b{display:block;margin-top:7px;color:#173f4c;font:1000 12px/1.25 system-ui}.v14-extra-box p{margin:5px 0 0;color:#718a93;font:750 7.5px/1.4 system-ui}.v14-total-chips{display:flex;gap:4px;flex-wrap:wrap;margin-top:7px}.v14-total-chips span{padding:5px 7px;border-radius:9px;background:linear-gradient(135deg,#dcfaf4,#e5eaff);color:#2d6571;font:1000 7px/1 system-ui;border:1px solid white}.v14-risk-zero{color:#9d6f78!important}.v14-risk-ok{color:#1c8d72!important}
+@media(max-width:560px){.v14-intel-strip{grid-template-columns:1fr}.v14-intel-side{display:flex;align-items:center;justify-content:space-between;gap:8px}.v14-intel-side p{margin:0}.v14-stage-card{width:88vw;padding:15px}.v14-stage-logo{width:94px;height:94px;border-radius:23px}.v14-extra-grid{grid-template-columns:1fr 1fr}}
+</style>
+<script id="v14-multigame-max-js">
+(()=>{
+ const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+ const catName=v=>({'sicbo':'SICBO','xoc-dia':'XÓC ĐĨA','68gb':'68GB','tai-xiu':'TÀI XỈU'}[String(v||'').toLowerCase()]||String(v||'GAME').toUpperCase());
+ function installIntel(){const page=$('#portal-games');if(!page||$('.v14-intel-strip'))return;const tools=$('.v12-game-tools',page)||page.querySelector('.ultra-games-grid');if(!tools)return;const el=document.createElement('section');el.className='v14-intel-strip';el.innerHTML='<div class="v14-intel-main"><small>GAME INTELLIGENCE · V14</small><b>Nhiều game, một Control Center.</b><p>Mỗi bàn giữ lịch sử và bộ tự học riêng. Sicbo có thêm phân bố tổng; Xóc Đĩa học Chẵn/Lẻ; 68GB HŨ/MD5 tách dữ liệu độc lập.</p></div><div class="v14-intel-side"><div><small>LIVE LEARNING</small><b>24/7</b></div><p>Chỉ học sau khi kết quả thật được chốt.</p></div>';tools.insertAdjacentElement('afterend',el)}
+ function inheritImg(g){if(g?.image_url)return g.image_url;const sel=g?.parent_game==='sunwin'?'.portal-game-card.sun img':g?.parent_game==='lc79'?'.portal-game-card.lc img':g?.parent_game==='max789'?'.portal-game-card.max img':'';return sel?($(sel)?.src||''):''}
+ function decorate(){const rows=Array.isArray(gameConfig?.custom_games)?gameConfig.custom_games:[];$$('#portal-games .v5-custom-card').forEach(card=>{const g=rows.find(x=>String(x.table||'')===String(card.dataset.game||''));if(!g)return;const src=inheritImg(g),wrap=card.querySelector('.ultra-card-image'),img=wrap?.querySelector('img');if(src&&!img&&wrap){wrap.classList.remove('no-image');wrap.querySelector('.v5-fallback-logo')?.remove();const n=document.createElement('img');n.src=src;n.alt=g.name||g.slug;n.loading='lazy';wrap.prepend(n)}if(!card.querySelector('.v14-game-ribbon')){const r=document.createElement('span');r.className='v14-game-ribbon';r.innerHTML='<i class="v14-api-dot"></i>'+catName(g.category)+' · '+String(g.game_type||'tx').toUpperCase();card.appendChild(r)}const copy=card.querySelector('.ultra-card-copy');if(copy&&!copy.querySelector('.v14-learning')){const l=document.createElement('div');l.className='v14-learning';l.innerHTML='<span>🧠 TỰ HỌC</span><span>↻ WALK-FWD</span><span>⚡ '+Number(g.poll_seconds||4)+'S</span>';copy.appendChild(l)}});const filters=$('.v12-filters');if(filters&&!filters.querySelector('[data-cat="68gb"]')){const b=document.createElement('button');b.className='v12-filter';b.dataset.cat='68gb';b.textContent='68GB';filters.appendChild(b);b.onclick=()=>{filters.querySelectorAll('.v12-filter').forEach(x=>x.classList.remove('on'));b.classList.add('on');const cards=$$('#portal-games .portal-game-card');cards.forEach(c=>c.style.display=(c.dataset.v12Category==='68gb')?'':'none');const cnt=$('#v12-game-count');if(cnt)cnt.textContent=cards.filter(c=>c.dataset.v12Category==='68gb').length}}}
+ function ensureStage(){let s=$('#v14-analysis-stage');if(s)return s;const shell=$('#v9-game-shell');if(!shell)return null;s=document.createElement('div');s.id='v14-analysis-stage';s.innerHTML='<div class="v14-stage-card"><img class="v14-stage-logo" id="v14-stage-logo" alt="Game"><h2 id="v14-stage-name">API GAME</h2><p id="v14-stage-desc">Bàn phân tích realtime.</p><div class="v14-stage-pills"><span><i></i> API REALTIME</span><span>🧠 TỰ HỌC RIÊNG</span><span>📊 LỊCH SỬ THẬT</span></div></div>';shell.appendChild(s);return s}
+ window.__v14StageSync=(target,cfg,on)=>{const s=ensureStage();if(!s)return;s.classList.toggle('on',!!on);if(!on)return;const g=(cfg?.custom_games||[]).find(x=>x.table===target.table);const logo=$('#v14-stage-logo'),src=inheritImg(g);if(logo){if(src){logo.src=src;logo.style.display='block'}else logo.style.display='none'}const n=$('#v14-stage-name'),d=$('#v14-stage-desc');if(n)n.textContent=g?.name||'API GAME';if(d)d.textContent=g?.description||'Bàn phân tích realtime · chưa có link game nhúng.'};
+ function installExtra(){const sheet=$('#v12-analysis-sheet');if(!sheet||$('#v14-extra-analysis'))return;const el=document.createElement('div');el.id='v14-extra-analysis';el.innerHTML='<div class="v14-extra-grid"><div class="v14-extra-box"><small>PHÂN BỐ / VỊ TỔNG</small><b id="v14-sum-main">Chờ dữ liệu...</b><div class="v14-total-chips" id="v14-total-chips"></div><p id="v14-sum-note"></p></div><div class="v14-extra-box"><small>QUẢN LÝ VỐN THAM KHẢO</small><b id="v14-risk-main">Không tự động đặt cược</b><p id="v14-risk-note">Giới hạn vốn nhỏ, không gấp thếp.</p></div></div>';sheet.appendChild(el)}
+ function renderExtra(p){installExtra();const a=p?.analysis||{},box=$('#v14-extra-analysis');if(!box)return;const sum=a.sum_forecast,risk=a.risk_plan,parity=a.parity_profile;if(!sum&&!risk&&!parity){box.style.display='none';return}box.style.display='block';const main=$('#v14-sum-main'),chips=$('#v14-total-chips'),note=$('#v14-sum-note');if(sum){main.textContent='E≈'+(sum.expected_total??'-')+' · TÀI '+(sum.big_pct??'-')+'% / XỈU '+(sum.small_pct??'-')+'%';chips.innerHTML=(sum.top_totals||[]).map(x=>'<span>'+x.total+' · '+x.pct+'%</span>').join('');note.textContent=(sum.sample||0)+' phiên có tổng · '+(sum.note||'')}else if(parity){main.textContent='CHẴN '+parity.even_pct+'% · LẺ '+parity.odd_pct+'%';chips.innerHTML='';note.textContent=(parity.sample||0)+' phiên · '+(parity.note||'')}else{main.textContent='Engine nhị phân thích nghi';chips.innerHTML='';note.textContent='Tự học riêng sau khi phiên thật được chốt.'}if(risk){const rm=$('#v14-risk-main'),rn=$('#v14-risk-note'),cap=Number(risk.bankroll_cap_pct||0);rm.textContent=cap?'Tối đa '+cap+'% vốn / phiên':'RỦI RO CAO · 0% vốn';rm.className=cap?'v14-risk-ok':'v14-risk-zero';rn.textContent=cap&&risk.position_share_pct?'Cửa chính '+risk.main_share_pct+'% · vị tổng '+risk.position_share_pct+'% của mức rủi ro phiên. '+(risk.note||''):(risk.note||'Không tự động đặt cược.')}}
+ const oldShow=window.showPredictionUI;if(typeof oldShow==='function')window.showPredictionUI=function(p){const r=oldShow.apply(this,arguments);renderExtra(p);return r};
+ const oldDyn=window.renderDynamicGamesV5;if(typeof oldDyn==='function')window.renderDynamicGamesV5=function(){const r=oldDyn.apply(this,arguments);decorate();return r};
+ function init(){installIntel();installExtra();ensureStage();decorate();setTimeout(decorate,700);setTimeout(decorate,1700)}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
+})();
+</script>
+
+
+
+<!-- ===== V15 SILK MOTION · CLEAN COPY ===== -->
+<style id="v15-silk-motion-clean">
+:root{
+  --v15-ink:#163942;--v15-muted:#66828b;--v15-cyan:#73e7e5;--v15-blue:#9fb9ff;--v15-pink:#f5c1df;
+  --v15-glass:rgba(252,255,255,.78);--v15-line:rgba(255,255,255,.96);
+  --v15-shadow:0 16px 42px rgba(45,91,105,.12),inset 0 1px 0 rgba(255,255,255,.98)
+}
+body.light #portal-app{
+  background:
+    radial-gradient(circle at 14% 10%,rgba(127,235,223,.18),transparent 28%),
+    radial-gradient(circle at 86% 16%,rgba(165,181,255,.18),transparent 30%),
+    radial-gradient(circle at 50% 88%,rgba(245,192,220,.14),transparent 32%),
+    linear-gradient(180deg,#f4fbfc 0%,#f8f9ff 52%,#f7fbfc 100%)!important;
+  color:var(--v15-ink)!important;
+}
+/* calmer page transitions */
+.portal-page{opacity:0;transform:translate3d(0,7px,0) scale(.996);transition:opacity .24s ease,transform .30s cubic-bezier(.2,.75,.2,1);will-change:opacity,transform}
+.portal-page.on{opacity:1;transform:translate3d(0,0,0) scale(1)}
+.portal-main{scroll-behavior:smooth;overscroll-behavior-y:contain}
+/* cards */
+.ultra-panel,.portal-game-card,.v12-home-pro,.v12-game-tools,.vqr-bank-card,.account-card,.ua-card,.v14-intel-main,.v14-intel-side{
+  background:linear-gradient(145deg,rgba(255,255,255,.84),rgba(239,250,252,.70))!important;
+  border:1px solid var(--v15-line)!important;border-radius:26px!important;
+  box-shadow:var(--v15-shadow)!important;
+  -webkit-backdrop-filter:blur(18px) saturate(1.1);backdrop-filter:blur(18px) saturate(1.1)
+}
+.portal-game-card{overflow:hidden;transform:translateZ(0);transition:transform .24s cubic-bezier(.2,.75,.2,1),box-shadow .24s ease,border-color .24s ease!important}
+.portal-game-card:hover{transform:translateY(-2px) scale(1.006)!important;box-shadow:0 20px 48px rgba(45,91,105,.15),inset 0 1px 0 #fff!important}
+.portal-game-card:active{transform:scale(.985)!important;transition-duration:.09s!important}
+.ultra-card-image{border-radius:20px!important;overflow:hidden!important;background:#eef8fa!important}
+.ultra-card-image img{transition:transform .6s cubic-bezier(.2,.75,.2,1),filter .35s ease!important;filter:saturate(.94) contrast(1.02)!important}
+.portal-game-card:hover .ultra-card-image img{transform:scale(1.025)!important}
+.ultra-card-copy h3{color:#143943!important;font-size:19px!important;letter-spacing:.01em!important;margin-top:2px!important}
+.ultra-card-copy p{color:#6d858d!important;font-size:9px!important;line-height:1.45!important;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+/* remove noisy machine-like labels */
+.v5-engine-row,.v14-learning,.v14-game-ribbon,.v12-proof,.v13-feature-stickers,.v13-card-sticker,.ultra-card-copy>small{display:none!important}
+.ultra-live{top:8px!important;right:8px!important;padding:6px 8px!important;border-radius:999px!important;background:rgba(255,255,255,.86)!important;color:#26736f!important;border:1px solid rgba(255,255,255,.96)!important;box-shadow:0 7px 18px rgba(37,96,104,.13)!important;font-size:7px!important;letter-spacing:.04em!important;backdrop-filter:blur(10px)!important}
+/* navigation */
+.portal-dock.ultra-dock{background:rgba(247,253,254,.78)!important;border:1px solid rgba(255,255,255,.96)!important;box-shadow:0 15px 38px rgba(42,81,96,.15)!important;-webkit-backdrop-filter:blur(22px) saturate(1.15)!important;backdrop-filter:blur(22px) saturate(1.15)!important}
+.portal-dock.ultra-dock button{transition:transform .18s ease,background .22s ease,color .22s ease!important}
+.portal-dock.ultra-dock button:active{transform:scale(.94)!important}
+.portal-dock.ultra-dock button.on{background:linear-gradient(145deg,rgba(255,255,255,.96),rgba(231,249,249,.88))!important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.98),0 8px 20px rgba(57,103,116,.10)!important;color:#187381!important}
+/* game tools */
+.v12-game-tools{padding:9px!important;border-radius:24px!important}
+.v12-game-search{background:rgba(255,255,255,.78)!important;border:1px solid white!important;border-radius:18px!important;box-shadow:inset 0 1px 0 #fff!important}
+.v12-game-search input{color:#173e47!important;font-weight:800!important}
+.v12-filter{border-radius:999px!important;background:rgba(255,255,255,.66)!important;border:1px solid rgba(255,255,255,.94)!important;color:#6b858d!important;transition:all .18s ease!important}
+.v12-filter.on{background:linear-gradient(135deg,#dff9f5,#e7ebff)!important;color:#1d6d78!important;box-shadow:0 7px 18px rgba(55,105,118,.11)!important}
+/* hero copy: less robotic */
+.v12-editorial .v12-kicker{display:none!important}
+.v12-editorial h2{font-size:clamp(28px,7vw,46px)!important;color:#143b46!important;line-height:1.02!important;letter-spacing:-.02em!important}
+.v12-editorial p{color:#627f89!important;font-size:11px!important;line-height:1.65!important;max-width:620px}
+.v12-anime-card{border-radius:26px!important;box-shadow:0 20px 50px rgba(39,84,99,.14)!important}
+.v12-anime-caption{background:linear-gradient(180deg,transparent,rgba(12,41,52,.48))!important}
+/* lightweight ambient motion */
+#v13-fx-layer .v13-float:nth-child(n+7){display:none!important}
+.v13-float{opacity:.34!important;filter:none!important;animation-duration:12s!important;background:rgba(255,255,255,.52)!important;box-shadow:0 8px 22px rgba(53,103,117,.08)!important}
+/* analysis sheet */
+#v12-analysis-sheet{border-radius:28px 28px 0 0!important;background:rgba(250,254,255,.94)!important;border:1px solid white!important;box-shadow:0 -18px 55px rgba(37,78,91,.18)!important;-webkit-backdrop-filter:blur(24px)!important;backdrop-filter:blur(24px)!important}
+.v12-as-stat,.v14-extra-box{border-radius:18px!important;background:linear-gradient(145deg,#fff,#eef9fa)!important;border:1px solid #fff!important;box-shadow:0 9px 25px rgba(49,94,108,.08)!important}
+/* robot state smoother */
+#robot{transition:opacity .2s ease!important}
+#pred,#sid,#conf{transition:opacity .16s ease,transform .18s ease!important}
+#robot.v12-calculating #pred{animation:v15SoftPulse 1s ease-in-out infinite!important}
+@keyframes v15SoftPulse{0%,100%{opacity:.72;transform:scale(.985)}50%{opacity:1;transform:scale(1)}}
+/* remove excessive scan/sheens */
+.portal-game-card:before,.portal-game-card:after,.kg-card:after{animation:none!important;opacity:.12!important}
+@media(max-width:560px){
+ .ultra-panel,.portal-game-card,.v12-home-pro,.v12-game-tools,.vqr-bank-card{border-radius:22px!important}
+ .portal-game-card:hover{transform:none!important}
+ .v13-float:nth-child(n+5){display:none!important}
+ .v12-editorial h2{font-size:30px!important}
+}
+@media(prefers-reduced-motion:reduce){.portal-page,.portal-game-card,.ultra-card-image img,.v13-float,#robot.v12-calculating #pred{animation:none!important;transition-duration:.01ms!important}}
+</style>
+<script id="v15-clean-copy-js">
+(()=>{
+ const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+ function cleanCopy(){
+   const hero=$('.v12-editorial');
+   if(hero){
+     const h=hero.querySelector('h2'); if(h)h.innerHTML='Chọn game.<br>Xem dữ liệu rõ ràng.';
+     const p=hero.querySelector('p'); if(p)p.textContent='Mỗi game có khu vực riêng để xem phiên, lịch sử và phân tích. Giao diện được giữ gọn để bạn tìm đúng bàn nhanh hơn.';
+   }
+   const intel=$('.v14-intel-strip');
+   if(intel) intel.innerHTML='<div class="v14-intel-main"><b>Kho game</b><p>Chọn bàn bạn muốn mở. Các game mới thêm sau này sẽ tự xuất hiện tại đây.</p></div><div class="v14-intel-side"><div><b>Đang hoạt động</b></div><p>Dữ liệu cập nhật theo từng bàn.</p></div>';
+   $$('.ultra-live').forEach(x=>x.textContent='● LIVE');
+   $$('.v5-custom-card .portal-mode-btn').forEach(b=>{b.textContent='MỞ BÀN';});
+   const title=$('#v12-as-title'); if(title && /Phân tích phiên/i.test(title.textContent||'')) title.textContent='Chi tiết phiên';
+   const reason=$('#v12-as-reason'); if(reason && /MULTI-PATTERN|ADAPTIVE|ENGINE/i.test(reason.textContent||'')) reason.textContent='Thông tin sẽ cập nhật sau khi có dữ liệu phiên mới.';
+   const filterAll=$('.v12-filter[data-cat="all"]'); if(filterAll)filterAll.textContent='TẤT CẢ';
+ }
+ const oldDyn=window.renderDynamicGamesV5;
+ if(typeof oldDyn==='function')window.renderDynamicGamesV5=function(){const r=oldDyn.apply(this,arguments);requestAnimationFrame(cleanCopy);return r};
+ function init(){cleanCopy();setTimeout(cleanCopy,500);setTimeout(cleanCopy,1500)}
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
+})();
+</script>
+
+
+<style id="v16-ultra-sticker-theme">
+:root{
+  --v16-ink:#133843;
+  --v16-soft:#5d7d88;
+  --v16-line:rgba(255,255,255,.92);
+  --v16-glass:rgba(255,255,255,.76);
+  --v16-glass-2:rgba(246,252,255,.62);
+  --v16-shadow:0 20px 56px rgba(41,87,102,.14),inset 0 1px 0 rgba(255,255,255,.95);
+}
+html,body{background:linear-gradient(180deg,rgba(242,250,252,.86),rgba(234,244,248,.86))!important;color:var(--v16-ink)!important}
+body::before{content:'';position:fixed;inset:0;z-index:-2;background-image:linear-gradient(180deg,rgba(245,251,255,.42),rgba(236,246,249,.46)),url('assets/htung_user_bg_v16.jpg');background-size:cover;background-position:center;background-repeat:no-repeat;filter:saturate(1.02) contrast(1.02);transform:scale(1.04)}
+body::after{content:'';position:fixed;inset:0;z-index:-1;background:radial-gradient(circle at 14% 18%,rgba(118,238,230,.16),transparent 28%),radial-gradient(circle at 84% 20%,rgba(182,177,255,.13),transparent 24%),radial-gradient(circle at 50% 88%,rgba(255,177,222,.12),transparent 24%)}
+.portal-main,.ultra-main{position:relative;z-index:2}
+/* bigger pro greeting */
+.v16-hero-greeting{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:12px;padding:14px 16px;border-radius:24px;background:linear-gradient(145deg,rgba(255,255,255,.84),rgba(239,251,255,.66));border:1px solid rgba(255,255,255,.96);box-shadow:var(--v16-shadow)}
+.v16-hero-greeting .left small{display:block;color:#3e95a0;font:900 10px/1 'Be Vietnam Pro',sans-serif;letter-spacing:.16em;margin-bottom:6px;text-transform:uppercase}
+.v16-hero-greeting .left b{display:block;color:#173944;font:1000 clamp(20px,5vw,33px)/1.08 'Barlow Condensed','Be Vietnam Pro',sans-serif;letter-spacing:.01em}
+.v16-hero-greeting .left p{margin:7px 0 0;color:var(--v16-soft);font:800 11px/1.55 'Be Vietnam Pro',sans-serif;max-width:650px}
+.v16-hello-badges{display:flex;flex-wrap:wrap;gap:8px}
+.v16-hello-badges span{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:999px;background:rgba(255,255,255,.72);border:1px solid rgba(255,255,255,.96);box-shadow:0 8px 18px rgba(49,93,106,.08);color:#336975;font:900 9px 'Be Vietnam Pro',sans-serif}
+/* animated emoji galaxy */
+#v16-galaxy{position:fixed;inset:0;pointer-events:none;z-index:1;overflow:hidden}
+.v16-emoji{position:absolute;display:grid;place-items:center;width:34px;height:34px;border-radius:14px;background:rgba(255,255,255,.48);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);box-shadow:0 10px 24px rgba(47,97,110,.10);font-size:17px;opacity:.74;animation:v16FloatY var(--dur,10s) ease-in-out infinite}
+.v16-emoji.big{width:42px;height:42px;font-size:20px;border-radius:16px}
+.v16-emoji.mini{width:28px;height:28px;font-size:14px;border-radius:12px;opacity:.62}
+@keyframes v16FloatY{0%,100%{transform:translate3d(0,0,0) rotate(var(--rot,-4deg))}25%{transform:translate3d(var(--dx,8px),-10px,0) rotate(calc(var(--rot,-4deg) * -1))}50%{transform:translate3d(0,-18px,0) rotate(var(--rot,-4deg))}75%{transform:translate3d(calc(var(--dx,8px) * -1),-8px,0) rotate(calc(var(--rot,-4deg) * -1))}}
+/* sticker strips */
+.v16-sticker-board{display:grid;grid-template-columns:1.25fr .9fr;gap:12px;margin-top:12px}
+.v16-sticker-rail,.v16-slogan-panel{padding:14px 14px 12px;border-radius:24px;background:linear-gradient(145deg,rgba(255,255,255,.78),rgba(243,250,255,.66));border:1px solid rgba(255,255,255,.96);box-shadow:var(--v16-shadow)}
+.v16-mini-label{display:block;margin-bottom:10px;color:#509ba4;font:1000 9px 'Be Vietnam Pro';letter-spacing:.16em;text-transform:uppercase}
+.v16-stickers{display:flex;gap:8px;overflow:auto;padding-bottom:4px;scrollbar-width:none}.v16-stickers::-webkit-scrollbar{display:none}
+.v16-tag{flex:0 0 auto;display:inline-flex;align-items:center;gap:8px;padding:10px 12px;border-radius:16px;background:rgba(255,255,255,.75);border:1px solid rgba(255,255,255,.97);color:#315d69;font:900 8px 'Be Vietnam Pro';white-space:nowrap;box-shadow:0 8px 18px rgba(52,100,115,.08);animation:v16TagPulse 3.6s ease-in-out infinite}
+.v16-tag:nth-child(2n){animation-delay:-1.1s}.v16-tag:nth-child(3n){animation-delay:-2s}
+.v16-tag i{font-style:normal;font-size:16px}
+@keyframes v16TagPulse{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+.v16-slogan-track{display:flex;flex-direction:column;gap:8px}
+.v16-slogan{padding:11px 12px;border-radius:17px;background:linear-gradient(145deg,rgba(255,255,255,.75),rgba(240,249,252,.68));border:1px solid rgba(255,255,255,.95);color:#355f6b;font:900 9px/1.45 'Be Vietnam Pro';box-shadow:0 8px 18px rgba(49,95,108,.07)}
+.v16-slogan b{display:block;color:#173842;font-size:11px;margin-bottom:3px}
+/* deposit + keys + support visuals */
+#portal-deposit .ultra-panel,#portal-keys .ultra-panel,#portal-account .account-pro-shell{border-radius:28px!important;background:linear-gradient(145deg,rgba(255,255,255,.82),rgba(243,251,255,.68))!important;box-shadow:0 18px 48px rgba(41,86,101,.12),inset 0 1px 0 #fff!important}
+.v16-money-banner,.v16-support-card,.v16-key-note{margin-top:12px;padding:14px 15px;border-radius:22px;background:linear-gradient(145deg,rgba(255,255,255,.80),rgba(242,251,255,.70));border:1px solid rgba(255,255,255,.96);box-shadow:0 12px 28px rgba(49,93,106,.08)}
+.v16-money-banner{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.v16-money-banner b{display:block;color:#183a45;font-size:15px}.v16-money-banner small{display:block;color:#64808a;font:800 10px/1.4 'Be Vietnam Pro'}
+.v16-chipline{display:flex;flex-wrap:wrap;gap:7px}.v16-chipline span{padding:7px 11px;border-radius:999px;background:rgba(255,255,255,.74);border:1px solid rgba(255,255,255,.96);color:#2e6873;font:900 8px 'Be Vietnam Pro'}
+.v16-support-card h3,.v16-key-note h3{margin:0 0 7px;color:#173a44;font-size:17px}.v16-support-card p,.v16-key-note p{margin:0;color:#64808a;font:800 10px/1.6 'Be Vietnam Pro'}
+.v16-support-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:11px}.v16-support-actions a,.v16-support-actions button{min-height:40px;padding:0 14px;border-radius:14px;border:1px solid rgba(255,255,255,.96);background:rgba(255,255,255,.75);color:#205f68;font:900 9px 'Be Vietnam Pro';box-shadow:0 8px 18px rgba(45,89,104,.08);text-decoration:none}
+.portal-key-result,.v16-key-success{padding:15px;border-radius:20px;background:linear-gradient(145deg,rgba(230,255,243,.82),rgba(244,251,255,.78));border:1px solid rgba(255,255,255,.98);box-shadow:0 10px 24px rgba(46,97,108,.08);color:#0d5b44!important;font-weight:900}
+/* credit notification card */
+#v16-credit-pop{position:fixed;left:50%;top:24px;transform:translateX(-50%) translateY(-20px);z-index:2147483647;min-width:min(92vw,420px);max-width:92vw;padding:14px 16px;border-radius:24px;background:linear-gradient(145deg,rgba(255,255,255,.93),rgba(240,251,255,.88));border:1px solid rgba(255,255,255,.98);box-shadow:0 22px 55px rgba(39,82,96,.18);display:flex;align-items:center;gap:12px;opacity:0;pointer-events:none;transition:all .26s ease}
+#v16-credit-pop.on{opacity:1;transform:translateX(-50%) translateY(0)}
+#v16-credit-pop .ico{width:46px;height:46px;border-radius:16px;display:grid;place-items:center;background:linear-gradient(145deg,#defff3,#e8ecff 58%,#ffe7f6);font-size:22px;box-shadow:0 8px 22px rgba(65,117,130,.13)}
+#v16-credit-pop b{display:block;color:#173944;font:1000 14px/1.15 'Barlow Condensed','Be Vietnam Pro'}
+#v16-credit-pop p{margin:4px 0 0;color:#61808b;font:800 10px/1.5 'Be Vietnam Pro'}
+#v16-credit-pop button{margin-left:auto;border:0;background:transparent;color:#487985;font:900 12px 'Be Vietnam Pro'}
+/* prettier toast */
+#portal-toast{border-radius:18px!important;padding:12px 16px!important;box-shadow:0 16px 40px rgba(39,84,99,.16)!important;background:linear-gradient(145deg,rgba(255,255,255,.94),rgba(242,250,253,.90))!important;color:#173a44!important;border:1px solid rgba(255,255,255,.98)!important;min-width:min(88vw,360px)!important}
+#portal-toast.ok{background:linear-gradient(145deg,rgba(234,255,245,.95),rgba(242,252,255,.92))!important;color:#145c46!important}
+#portal-toast.err{background:linear-gradient(145deg,rgba(255,243,244,.96),rgba(255,250,252,.92))!important;color:#9d3651!important}
+/* smoother loader */
+#v13-loader .orb{font-size:24px!important}
+#v13-loader .v13-loader-card{border-radius:32px!important;box-shadow:0 30px 90px rgba(44,91,107,.18)!important}
+#v13-loader .v13-loader-sub{font-size:8.5px!important}
+#portal-home .v12-editorial h2 span{display:block;color:#2697a3}
+@media(max-width:760px){.v16-sticker-board{grid-template-columns:1fr}.v16-hero-greeting{padding:13px 14px}.v16-hello-badges{width:100%}.v16-emoji:nth-child(n+9){display:none}.v16-support-actions a,.v16-support-actions button{flex:1 1 140px}.v16-money-banner{display:block}.v16-money-banner .v16-chipline{margin-top:10px}}
+@media(max-width:520px){.v16-hero-greeting .left b{font-size:25px}.v16-hero-greeting .left p{font-size:10px}.v16-tag{font-size:7px;padding:9px 10px}.v16-slogan b{font-size:10px}.v16-emoji:nth-child(n+7){display:none}.v16-sticker-rail,.v16-slogan-panel{padding:13px}.portal-plan.pro-key-card{border-radius:22px!important}}
+@media(prefers-reduced-motion:reduce){.v16-emoji,.v16-tag{animation:none!important}}
+</style>
+<script id="v16-ultra-sticker-js">
+(()=>{
+  const $=(s,root=document)=>root.querySelector(s), $$=(s,root=document)=>[...root.querySelectorAll(s)];
+  const stickers=['🤖','💎','✨','🎯','⚡','🧠','🎲','🃏','🌸','🫧','🚀','💰','🔐','🎮','🎉','🌈'];
+  let creditTimer=null, lastBalance=null, lastKeyExp='', lastDepSig='';
+  function ensureGalaxy(){
+    if($('#v16-galaxy')) return;
+    const wrap=document.createElement('div'); wrap.id='v16-galaxy';
+    const pos=[[3,18,'big'],[92,16,''],[7,38,'mini'],[91,41,''],[5,68,''],[88,76,'big'],[18,87,'mini'],[80,58,''],[49,14,''],[51,88,'mini']];
+    wrap.innerHTML=pos.map((p,i)=>`<span class="v16-emoji ${p[2]}" style="left:${p[0]}%;top:${p[1]}%;--dur:${8.5+(i%4)*1.5}s;--dx:${6+(i%5)*3}px;--rot:${-8+i*2}deg">${stickers[i%stickers.length]}</span>`).join('');
+    document.body.appendChild(wrap);
+  }
+  function ensureCreditPop(){
+    if($('#v16-credit-pop')) return;
+    const el=document.createElement('div'); el.id='v16-credit-pop';
+    el.innerHTML='<div class="ico">🎉</div><div class="txt"><b>Thông báo hệ thống</b><p>Nội dung sẽ hiển thị tại đây.</p></div><button type="button">✕</button>';
+    el.querySelector('button').onclick=()=>el.classList.remove('on');
+    document.body.appendChild(el);
+  }
+  function showCredit(title, text, icon='🎉'){
+    ensureCreditPop(); const el=$('#v16-credit-pop'); if(!el) return;
+    $('.ico',el).textContent=icon; $('b',el).textContent=title; $('p',el).textContent=text;
+    el.classList.add('on'); clearTimeout(creditTimer); creditTimer=setTimeout(()=>el.classList.remove('on'),5600);
+  }
+  function burst(kind='money'){
+    const all=kind==='key'?['🔐','💎','✨','🎉','🚀','🫧']:['💰','🎉','✨','🫧','💎','🤖'];
+    for(let i=0;i<18;i++){
+      const s=document.createElement('span'); s.textContent=all[i%all.length];
+      s.style.cssText=`position:fixed;left:${40+Math.random()*20}vw;top:${18+Math.random()*6}vh;z-index:2147483646;font-size:${18+Math.random()*14}px;pointer-events:none;transition:transform 1.45s cubic-bezier(.2,.75,.2,1),opacity 1.45s ease;opacity:0.96;filter:drop-shadow(0 6px 12px rgba(56,92,109,.16))`;
+      document.body.appendChild(s); requestAnimationFrame(()=>{s.style.transform=`translate(${(-150+Math.random()*300)}px,${80+Math.random()*200}px) rotate(${(-140+Math.random()*280)}deg)`; s.style.opacity='0';}); setTimeout(()=>s.remove(),1500);
+    }
+  }
+  function upgradeCopy(){
+    const home=$('#portal-home'); if(home){
+      if(!$('.v16-hero-greeting',home)){
+        const box=document.createElement('section'); box.className='v16-hero-greeting';
+        box.innerHTML=`<div class="left"><small>VIP PRO MAX · MULTI GAME SPACE</small><b>Chào mừng trở lại.<br>Không gian tool <span>VIP</span> sáng, rõ và dễ dùng.</b><p>Chọn đúng game, theo dõi phiên mới, xem phân tích và lịch sử trong một giao diện gọn gàng hơn. Sau này thêm Sicbo, Xóc Đĩa, Baccarat hay game mới khác vẫn tự sắp xếp hợp lý.</p></div><div class="v16-hello-badges"><span>🤖 Robot đồng bộ</span><span>💎 Giao diện Pro</span><span>🎮 Mở game ngay trong web</span></div>`;
+        const anchor=home.firstElementChild; home.insertBefore(box, anchor||home.firstChild);
+      }
+      if(!$('.v16-sticker-board',home)){
+        const w=document.createElement('div'); w.className='v16-sticker-board';
+        w.innerHTML=`<div class="v16-sticker-rail"><span class="v16-mini-label">Sticker & emoji nổi bật</span><div class="v16-stickers"><span class="v16-tag"><i>🤖</i> Robot đang theo dõi dữ liệu</span><span class="v16-tag"><i>✨</i> Chuyển động mềm và mượt</span><span class="v16-tag"><i>🎯</i> Hiển thị phiên rõ ràng</span><span class="v16-tag"><i>🧠</i> Tự học theo từng game</span><span class="v16-tag"><i>💰</i> Theo dõi nạp tiền và số dư</span><span class="v16-tag"><i>🔐</i> Mua key ngay trên tài khoản</span><span class="v16-tag"><i>🎮</i> Sẵn sàng thêm nhiều game mới</span><span class="v16-tag"><i>🌈</i> Liquid Glass sáng và dịu mắt</span></div></div><div class="v16-slogan-panel"><span class="v16-mini-label">Biểu ngữ nổi bật</span><div class="v16-slogan-track"><div class="v16-slogan"><b>Giao diện sáng và chuyên nghiệp</b> Dễ nhìn trên điện thoại, chữ rõ hơn và ít rối mắt.</div><div class="v16-slogan"><b>Mỗi game một không gian riêng</b> Dữ liệu, lịch sử và lớp robot luôn bám theo đúng bàn bạn mở.</div><div class="v16-slogan"><b>Sẵn sàng mở rộng</b> Cấu trúc đã chuẩn bị để thêm game mới, ảnh mới và link mới sau này.</div></div></div>`;
+        const after=$('.v16-hero-greeting',home); after?.insertAdjacentElement('afterend',w);
+      }
+      const ed=$('.v12-editorial',home); if(ed){const h=$('h2',ed); if(h) h.innerHTML='Mở đúng game.<br><span>Theo dõi dữ liệu và robot thật gọn.</span>'; const p=$('p',ed); if(p) p.textContent='Mỗi game có khu vực riêng để hiển thị phiên, lịch sử, phân tích và trạng thái. Khi có game mới, hệ thống sẽ tự sắp xếp thêm vào kho game.';}
+    }
+    const account=$('#portal-account');
+    if(account && !$('.v16-support-card',account)){
+      const card=document.createElement('div'); card.className='v16-support-card';
+      const tele=(window.appConfig&&appConfig.notice_telegram_url)?`<a href="${appConfig.notice_telegram_url}" target="_blank" rel="noopener">💬 Telegram hỗ trợ</a>`:'';
+      const zalo=(window.appConfig&&appConfig.notice_zalo_url)?`<a href="${appConfig.notice_zalo_url}" target="_blank" rel="noopener">💠 Zalo hỗ trợ</a>`:'';
+      card.innerHTML=`<h3>Hỗ trợ tài khoản & admin</h3><p>Kiểm tra thiết bị, làm mới trạng thái tài khoản và liên hệ hỗ trợ ngay từ đây. Khi cần thêm game, đổi ảnh hoặc chỉnh API, bạn có thể thao tác từ bot admin và theo dõi lại ở trang này.</p><div class="v16-support-actions"><button type="button" id="v16-refresh-account">🔄 Làm mới tài khoản</button>${tele}${zalo}</div>`;
+      account.appendChild(card);
+      $('#v16-refresh-account',card)?.addEventListener('click',()=>window.portalRefresh?.());
+    }
+    const dep=$('#portal-deposit'); if(dep){
+      if(!$('.v16-money-banner',dep)){
+        const box=document.createElement('div'); box.className='v16-money-banner';
+        box.innerHTML=`<div><b>⚡ Nạp tiền nhanh bằng VietQR</b><small>Tạo mã QR, chuyển khoản đúng nội dung và theo dõi trạng thái cộng tiền trực tiếp trên web.</small></div><div class="v16-chipline"><span>💰 Cập nhật số dư</span><span>🔔 Có thông báo cộng tiền</span><span>🧾 Giữ lịch sử giao dịch</span></div>`;
+        dep.insertBefore(box, dep.firstChild);
+      }
+      const input=$('#portal-deposit-amount',dep); if(input) input.placeholder='Nhập số tiền bạn muốn nạp';
+      const btn=$('#portal-deposit-create',dep); if(btn) btn.innerHTML='TẠO MÃ QR NẠP TIỀN <b>↗</b>';
+    }
+    const keys=$('#portal-keys'); if(keys && !$('.v16-key-note',keys)){
+      const k=document.createElement('div'); k.className='v16-key-note';
+      k.innerHTML='<h3>🔐 Mua key trực tiếp bằng số dư</h3><p>Chọn gói phù hợp, hệ thống sẽ gắn key thẳng vào tài khoản của bạn. Sau khi kích hoạt thành công, web sẽ hiện thông báo rõ ràng và cập nhật hạn dùng ngay.</p>';
+      keys.insertBefore(k, keys.firstChild);
+    }
+  }
+  function decoratePlans(){ $$('.portal-plan.pro-key-card').forEach((card,i)=>{ if(card.dataset.v16done) return; card.dataset.v16done='1'; const icon=document.createElement('div'); icon.style.cssText='position:absolute;right:14px;top:14px;width:36px;height:36px;border-radius:14px;display:grid;place-items:center;background:rgba(255,255,255,.84);border:1px solid rgba(255,255,255,.98);box-shadow:0 8px 18px rgba(48,94,108,.08);font-size:18px'; icon.textContent=['🔐','💎','✨','🚀'][i%4]; card.style.position='relative'; card.appendChild(icon); const btn=$('button[data-buy]',card); if(btn) btn.textContent='MUA KEY NGAY →'; }); }
+  function patchToast(){
+    const old=window.portalToast; if(typeof old!=='function' || old.__v16) return;
+    const f=function(msg,type='info'){
+      let icon='✨ '; if(type==='ok') icon='✅ '; else if(type==='err') icon='⚠️ '; else if(/nạp|tiền|số dư/i.test(msg||'')) icon='💰 ';
+      return old.call(this, String(msg||'').startsWith(icon.trim())?String(msg):icon+String(msg||''), type);
+    };
+    f.__v16=true; window.portalToast=f;
+  }
+  function patchLoader(){
+    const old=window.showLoader; if(typeof old!=='function' || old.__v16) return;
+    const f=function(title,sub,ms){ const stop=old.call(this,title||'Đang chuẩn bị bàn chơi',sub||'Đồng bộ dữ liệu, robot và giao diện hiển thị.',ms||1450); const orb=$('#v13-loader .orb'); if(orb) orb.textContent=stickers[Math.floor(Math.random()*stickers.length)]; return stop; };
+    f.__v16=true; window.showLoader=f;
+  }
+  function patchRefresh(){
+    const old=window.portalRefresh; if(typeof old!=='function' || old.__v16) return;
+    const f=async function(){ const r=await old.apply(this,arguments); try{
+      const p=window.portalProfile||{}; const bal=Number(p.balance_vnd||0); const exp=p.key?.expires_at||'';
+      if(lastBalance!==null && bal>lastBalance){ const diff=bal-lastBalance; showCredit('Đã cộng tiền vào tài khoản', `Số dư tăng thêm ${typeof moneyVN==='function'?moneyVN(diff):diff}. Hệ thống đã cập nhật số dư mới cho bạn.`, '💰'); burst('money'); }
+      if(exp && exp!==lastKeyExp && lastKeyExp){ showCredit('Key đã được kích hoạt', `Quyền truy cập đã cập nhật hạn dùng mới.`, '🔐'); burst('key'); }
+      lastBalance=bal; lastKeyExp=exp;
+    }catch(_){ } return r; };
+    f.__v16=true; window.portalRefresh=f;
+  }
+  function patchDeposit(){
+    const old=window.portalRenderDeposit; if(typeof old!=='function' || old.__v16) return;
+    const f=function(d){ const r=old.apply(this,arguments); try{ if(d&&d.status==='approved'){ const sig=String(d.id||d.code||d.transfer_content||''); if(sig && sig!==lastDepSig){ lastDepSig=sig; showCredit('Nạp tiền thành công', `Yêu cầu ${d.code||d.id||''} đã được xác nhận và cộng tiền thành công.`, '💰'); burst('money'); } } }catch(_){ } return r; };
+    f.__v16=true; window.portalRenderDeposit=f;
+  }
+  function patchBuy(){
+    const old=window.portalBuyKey; if(typeof old!=='function' || old.__v16) return;
+    const f=async function(){ const r=await old.apply(this,arguments); try{ const box=$('#portal-key-result'); if(box){ box.classList.add('v16-key-success'); box.innerHTML='🔐 Kích hoạt key thành công.<br><small>Quyền truy cập đã gắn trực tiếp vào tài khoản của bạn.</small>'; } showCredit('Mua key thành công', 'Quyền key đã được gắn vào tài khoản và cập nhật hạn dùng.', '🔐'); burst('key'); }catch(_){ } return r; };
+    f.__v16=true; window.portalBuyKey=f;
+  }
+  function patchPlans(){ const old=window.portalLoadPlans; if(typeof old!=='function' || old.__v16) return; const f=async function(){ const r=await old.apply(this,arguments); requestAnimationFrame(decoratePlans); return r; }; f.__v16=true; window.portalLoadPlans=f; }
+  function init(){ ensureGalaxy(); ensureCreditPop(); patchToast(); patchLoader(); patchRefresh(); patchDeposit(); patchBuy(); patchPlans(); upgradeCopy(); decoratePlans(); setTimeout(upgradeCopy,800); setTimeout(decoratePlans,1200); }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', init, {once:true}); else init();
+})();
+</script>
+
+
+<style id="v17-cute-anime-sakura">
+:root{--v17-pink:#ff8fb9;--v17-pink2:#ffd9e8;--v17-cyan:#7ce8eb;--v17-ink:#173944;--v17-soft:#67808a;--v17-glow:0 0 0 10px rgba(255,175,210,.10),0 0 38px rgba(255,173,222,.26)}
+body::after{background:radial-gradient(circle at 14% 18%,rgba(255,184,214,.16),transparent 28%),radial-gradient(circle at 84% 20%,rgba(182,177,255,.13),transparent 24%),radial-gradient(circle at 50% 88%,rgba(125,236,234,.12),transparent 24%)!important}
+.v16-hero-greeting,.v16-sticker-rail,.v16-slogan-panel,.v16-money-banner,.v16-support-card,.v16-key-note{box-shadow:0 18px 48px rgba(61,110,123,.11),0 0 0 1px rgba(255,255,255,.85),0 0 28px rgba(255,195,220,.08)!important}
+.v16-hero-greeting .left small,.v16-mini-label{color:#d95b8f!important}
+.v16-hero-greeting .left b span{color:#e46ea2}
+.v16-tag,.v16-hello-badges span,.v16-slogan{background:linear-gradient(145deg,rgba(255,255,255,.80),rgba(255,244,249,.74))!important}
+#v17-touch-layer{position:fixed;inset:0;pointer-events:none;z-index:2147483640;overflow:hidden}
+.v17-touch-glow{position:fixed;width:24px;height:24px;border-radius:50%;pointer-events:none;z-index:2147483641;background:radial-gradient(circle,rgba(255,255,255,.95) 0,rgba(255,205,228,.92) 18%,rgba(255,164,206,.34) 45%,rgba(255,164,206,0) 74%);transform:translate(-50%,-50%) scale(.2);opacity:.98;animation:v17Glow .68s ease-out forwards;mix-blend-mode:screen}.v17-touch-ring{position:fixed;width:18px;height:18px;border-radius:50%;border:2px solid rgba(255,165,207,.62);pointer-events:none;z-index:2147483641;transform:translate(-50%,-50%) scale(.25);opacity:.92;animation:v17Ring .76s ease-out forwards}.v17-petal{position:fixed;left:0;top:0;pointer-events:none;z-index:2147483642;font-size:18px;opacity:.95;will-change:transform,opacity;animation:v17PetalFall var(--dur,1500ms) cubic-bezier(.2,.72,.2,1) forwards}
+@keyframes v17Glow{0%{transform:translate(-50%,-50%) scale(.2);opacity:.98}100%{transform:translate(-50%,-50%) scale(4.6);opacity:0}}
+@keyframes v17Ring{0%{transform:translate(-50%,-50%) scale(.25);opacity:.92}100%{transform:translate(-50%,-50%) scale(4.8);opacity:0}}
+@keyframes v17PetalFall{0%{transform:translate3d(var(--x0),var(--y0),0) rotate(0deg) scale(.9);opacity:.98}100%{transform:translate3d(var(--x1),calc(var(--y1) + 66px),0) rotate(var(--r,140deg)) scale(1.1);opacity:0}}
+/* lock overlay */
+.v17-locked .portal-mode-btn,.v17-locked .go{visibility:hidden!important}
+.v17-lock-badge{position:absolute;top:14px;left:14px;z-index:9;display:flex;align-items:center;gap:7px;padding:8px 12px;border-radius:999px;background:rgba(255,255,255,.84);border:1px solid rgba(255,255,255,.98);box-shadow:0 10px 24px rgba(57,101,113,.12);color:#d24f83;font:1000 8px 'Be Vietnam Pro'}
+.v17-lock-layer{position:absolute;inset:0;z-index:8;display:flex;align-items:flex-end;justify-content:center;padding:16px;background:linear-gradient(180deg,rgba(255,245,249,.00),rgba(255,241,247,.28) 44%,rgba(255,241,247,.80) 100%);backdrop-filter:blur(1px)}
+.v17-lock-card{width:100%;padding:14px 14px 13px;border-radius:20px;background:linear-gradient(145deg,rgba(255,255,255,.84),rgba(255,243,248,.76));border:1px solid rgba(255,255,255,.96);box-shadow:0 12px 30px rgba(56,95,108,.12);text-align:center}
+.v17-lock-card b{display:block;color:#163843;font:1000 13px 'Barlow Condensed','Be Vietnam Pro';margin-bottom:4px}.v17-lock-card p{margin:0;color:#6d7f87;font:800 9px/1.5 'Be Vietnam Pro'}
+/* premium modal */
+#v17-modal{position:fixed;inset:0;z-index:2147483645;display:none;place-items:center;padding:18px;background:rgba(238,246,250,.58);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px)}#v17-modal.on{display:grid}.v17-modal-card{width:min(92vw,390px);padding:18px 18px 16px;border-radius:30px;background:linear-gradient(145deg,rgba(255,255,255,.95),rgba(251,244,248,.90));border:1px solid rgba(255,255,255,.98);box-shadow:0 28px 90px rgba(52,92,105,.18),0 0 0 1px rgba(255,255,255,.96);position:relative;overflow:hidden}.v17-modal-card:before{content:'';position:absolute;inset:-40%;background:conic-gradient(from 0deg,transparent,rgba(255,185,214,.18),transparent,rgba(126,235,233,.16),transparent);animation:v17ModalSpin 7s linear infinite;pointer-events:none}.v17-modal-card>*{position:relative;z-index:1}.v17-modal-head{display:flex;align-items:center;gap:12px}.v17-modal-ico{width:54px;height:54px;border-radius:18px;display:grid;place-items:center;background:linear-gradient(145deg,#fff,#ffe8f2 55%,#e8fdff);box-shadow:0 10px 26px rgba(63,110,122,.12);font-size:24px}.v17-modal-head h3{margin:0;color:#173944;font:1000 22px/1 'Barlow Condensed','Be Vietnam Pro'}.v17-modal-head p{margin:5px 0 0;color:#6b838d;font:800 10px/1.5 'Be Vietnam Pro'}.v17-modal-note{margin-top:13px;padding:12px 13px;border-radius:18px;background:linear-gradient(145deg,rgba(255,255,255,.82),rgba(255,243,248,.76));border:1px solid rgba(255,255,255,.97);color:#466773;font:900 9px/1.55 'Be Vietnam Pro'}.v17-modal-price{display:flex;justify-content:space-between;align-items:end;gap:10px;margin-top:12px;padding:12px 13px;border-radius:19px;background:linear-gradient(145deg,rgba(255,255,255,.82),rgba(239,251,255,.76));border:1px solid rgba(255,255,255,.97)}.v17-modal-price span{display:block;color:#76909a;font:900 8px 'Be Vietnam Pro';letter-spacing:.12em}.v17-modal-price b{display:block;color:#d75489;font:1000 21px/1 'Barlow Condensed','Be Vietnam Pro'}.v17-modal-price small{display:block;color:#4d6a76;font:900 9px 'Be Vietnam Pro';text-align:right}.v17-modal-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:15px}.v17-modal-actions button{min-height:48px;border-radius:18px;border:1px solid rgba(255,255,255,.98);font:1000 10px 'Be Vietnam Pro';box-shadow:0 10px 24px rgba(60,102,114,.10)}.v17-cancel{background:rgba(255,255,255,.82);color:#416974}.v17-ok{background:linear-gradient(145deg,#ffe2ef,#defeff 56%,#f8e9ff);color:#173944}.v17-ok:disabled{opacity:.65}.v17-modal-inline-err{margin-top:10px;padding:12px 13px;border-radius:16px;background:linear-gradient(145deg,rgba(255,240,244,.94),rgba(255,250,251,.92));border:1px solid rgba(255,214,225,.98);color:#a13a62;font:900 9px/1.55 'Be Vietnam Pro';display:none}.v17-modal-inline-err.on{display:block}.v17-modal-inline-ok{margin-top:10px;padding:12px 13px;border-radius:16px;background:linear-gradient(145deg,rgba(233,255,244,.95),rgba(246,252,255,.92));border:1px solid rgba(219,255,236,.98);color:#15604d;font:900 9px/1.55 'Be Vietnam Pro';display:none}.v17-modal-inline-ok.on{display:block}
+@keyframes v17ModalSpin{to{transform:rotate(360deg)}}
+/* touch press card effect */
+.portal-game-card,.portal-plan.pro-key-card,.portal-primary,.v16-support-actions button,.v16-support-actions a{transition:transform .16s ease,box-shadow .22s ease,filter .22s ease!important}.portal-game-card:active,.portal-plan.pro-key-card:active,.portal-primary:active,.v16-support-actions button:active,.v16-support-actions a:active{transform:scale(.985)!important;box-shadow:0 0 0 10px rgba(255,201,222,.12),0 16px 34px rgba(56,98,111,.12)!important;filter:brightness(1.02)!important}
+@media(max-width:560px){.v17-modal-card{border-radius:26px}.v17-modal-head h3{font-size:20px}.v17-lock-card b{font-size:12px}}
+@media(prefers-reduced-motion:reduce){.v17-petal,.v17-touch-glow,.v17-touch-ring,.v17-modal-card:before{animation:none!important}}
+</style>
+<script id="v17-cute-anime-sakura-js">
+(()=>{
+ const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
+ const petals=['🌸','🌸','🌸','✨','💖'];
+ let modalState={type:'',pid:null};
+ function ensureFx(){ if($('#v17-touch-layer')) return; const d=document.createElement('div'); d.id='v17-touch-layer'; document.body.appendChild(d); }
+ function bloom(x,y){ ensureFx(); const root=$('#v17-touch-layer')||document.body; const glow=document.createElement('span'); glow.className='v17-touch-glow'; glow.style.left=x+'px'; glow.style.top=y+'px'; root.appendChild(glow); const ring=document.createElement('span'); ring.className='v17-touch-ring'; ring.style.left=x+'px'; ring.style.top=y+'px'; root.appendChild(ring); setTimeout(()=>{glow.remove();ring.remove();},800); for(let i=0;i<10;i++){ const p=document.createElement('span'); p.className='v17-petal'; p.textContent=petals[i%petals.length]; p.style.setProperty('--x0',x+'px'); p.style.setProperty('--y0',y+'px'); p.style.setProperty('--x1',(x+(-90+Math.random()*180))+'px'); p.style.setProperty('--y1',(y+(10+Math.random()*80))+'px'); p.style.setProperty('--r',(-180+Math.random()*360)+'deg'); p.style.setProperty('--dur',(1100+Math.random()*900)+'ms'); root.appendChild(p); setTimeout(()=>p.remove(),2200);} }
+ function bindTouchFx(){ const h=(e)=>{ if(e.target.closest('#v17-modal')) return; const pt=e.touches?.[0]||e.changedTouches?.[0]||e; if(!pt) return; bloom(pt.clientX,pt.clientY); }; document.addEventListener('click',h,true); document.addEventListener('touchstart',h,{passive:true,capture:true}); }
+ function ensureModal(){ if($('#v17-modal')) return; const m=document.createElement('div'); m.id='v17-modal'; m.innerHTML=`<div class="v17-modal-card"><div class="v17-modal-head"><div class="v17-modal-ico" id="v17-modal-ico">🔐</div><div><h3 id="v17-modal-title">Mua key sử dụng</h3><p id="v17-modal-sub">Xác nhận trước khi kích hoạt quyền truy cập.</p></div></div><div class="v17-modal-note" id="v17-modal-note">Bạn cần có key để mở toàn bộ game trong hệ thống.</div><div class="v17-modal-price"><div><span>CHI PHÍ</span><b id="v17-modal-price">0đ</b></div><small id="v17-modal-meta">Thanh toán bằng số dư tài khoản</small></div><div id="v17-modal-inline-err" class="v17-modal-inline-err"></div><div id="v17-modal-inline-ok" class="v17-modal-inline-ok"></div><div class="v17-modal-actions"><button type="button" class="v17-cancel" id="v17-modal-cancel">ĐÓNG</button><button type="button" class="v17-ok" id="v17-modal-ok">XÁC NHẬN</button></div></div>`; document.body.appendChild(m); m.addEventListener('click',e=>{ if(e.target===m) closeModal();}); $('#v17-modal-cancel',m).onclick=closeModal; $('#v17-modal-ok',m).onclick=onModalOk; }
+ function openModal(cfg){ ensureModal(); modalState=cfg||{}; $('#v17-modal').classList.add('on'); $('#v17-modal-ico').textContent=cfg.icon||'🔐'; $('#v17-modal-title').textContent=cfg.title||'Thông báo'; $('#v17-modal-sub').textContent=cfg.sub||''; $('#v17-modal-note').textContent=cfg.note||''; $('#v17-modal-price').textContent=cfg.priceText||'—'; $('#v17-modal-meta').textContent=cfg.meta||''; const ok=$('#v17-modal-ok'), cancel=$('#v17-modal-cancel'); ok.textContent=cfg.okText||'XÁC NHẬN'; cancel.textContent=cfg.cancelText||'ĐÓNG'; ok.style.display=cfg.hideOk?'none':''; cancel.style.gridColumn=cfg.hideOk?'1 / -1':''; ok.disabled=false; hideInline(); }
+ function closeModal(){ $('#v17-modal')?.classList.remove('on'); hideInline(); }
+ function showErr(msg){ const el=$('#v17-modal-inline-err'); el.textContent=msg; el.classList.add('on'); $('#v17-modal-inline-ok')?.classList.remove('on'); }
+ function showOk(msg){ const el=$('#v17-modal-inline-ok'); el.textContent=msg; el.classList.add('on'); $('#v17-modal-inline-err')?.classList.remove('on'); }
+ function hideInline(){ $('#v17-modal-inline-err')?.classList.remove('on'); $('#v17-modal-inline-ok')?.classList.remove('on'); }
+ function gameNeedsKey(){ openModal({type:'need-key',icon:'🔒',title:'Bạn cần mua key để sử dụng',sub:'Game này đang được khóa quyền truy cập.',note:'Tài khoản của bạn hiện chưa có key còn hạn. Hãy vào mục Mua key để kích hoạt quyền dùng trước khi mở game.',priceText:'Cần key hoạt động',meta:'Mở tab Mua key để chọn gói phù hợp',okText:'ĐI ĐẾN MUA KEY',cancelText:'ĐÓNG'}); }
+ function getPlanCard(pid){ return document.querySelector(`[data-buy="${pid}"]`)?.closest('.portal-plan'); }
+ function parsePrice(card){ const t=card?.querySelector('strong')?.textContent||''; const n=Number((t.match(/\d+/g)||[]).join('')); return Number.isFinite(n)?n:0; }
+ function money(n){ try{return typeof moneyVN==='function'?moneyVN(n):String(n)}catch(_){return String(n)} }
+ async function onModalOk(){ const ok=$('#v17-modal-ok'); if(modalState.type==='need-key'){ closeModal(); try{ window.portalSetPage?.('keys'); }catch(_){} return; }
+   if(modalState.type!=='buy-key') return closeModal();
+   if(window.portalProfile?.key){ showErr('Key hiện tại của bạn vẫn còn hạn. Hãy chờ key cũ hết hạn rồi mới mua key mới.'); return; }
+   ok.disabled=true; ok.textContent='ĐANG XÁC NHẬN...';
+   try{
+     const d=await portalFetch('/api/account/buy-key',{method:'POST',body:JSON.stringify({plan_id:modalState.pid})});
+     showOk('Mua key thành công. Quyền truy cập đã được gắn vào tài khoản của bạn.');
+     try{const box=document.getElementById('portal-key-result'); if(box){ box.classList.add('v16-key-success'); box.innerHTML=`🔐 Kích hoạt key thành công.<br><small>Hạn: ${typeof fmtPortalTime==='function'?fmtPortalTime(d.expires_at):d.expires_at}</small>`; }}catch(_){ }
+     try{ window.portalRefresh?.(); }catch(_){ }
+     try{ window.portalToast?.('Mua key thành công','ok'); }catch(_){ }
+     setTimeout(closeModal,1200);
+   }catch(e){
+     const msg=String(e?.message||'Không thể mua key lúc này');
+     showErr(msg.includes('m có đủ tiền chó đâu mà mua')?msg:(/Số dư|không đủ/i.test(msg)?'m có đủ tiền chó đâu mà mua':msg));
+     ok.disabled=false; ok.textContent='XÁC NHẬN MUA KEY';
+     return;
+   }
+   ok.disabled=false; ok.textContent='XÁC NHẬN MUA KEY';
+ }
+ function upgradeBuyFlow(){
+   window.portalBuyKey=async function(pid){
+     const card=getPlanCard(pid); const name=card?.querySelector('h3')?.textContent?.trim()||'Gói key'; const price=parsePrice(card); 
+     if(window.portalProfile?.key){
+       openModal({type:'buy-key',pid,icon:'🔐',title:'Không thể mua thêm key',sub:'Tài khoản đã có key đang hoạt động.',note:'Khi key hiện tại còn hạn sử dụng, bạn sẽ không thể mua chồng thêm key khác. Hãy chờ key cũ hết hạn rồi quay lại mua key mới.',priceText:window.portalProfile.key?.expires_at?(typeof fmtPortalTime==='function'?fmtPortalTime(window.portalProfile.key.expires_at):window.portalProfile.key.expires_at):'Đang có key hoạt động',meta:'Mỗi tài khoản chỉ dùng 1 key đang hoạt động',okText:'ĐÃ HIỂU',cancelText:'ĐÓNG',hideOk:true});
+       return;
+     }
+     if(Number(window.portalProfile?.balance_vnd||0) < price){
+       openModal({type:'buy-key',pid,icon:'💸',title:'Số dư chưa đủ để mua key',sub:'Bạn cần nạp thêm tiền trước khi kích hoạt.',note:'Lý do: m có đủ tiền chó đâu mà mua',priceText:money(price),meta:`Số dư hiện tại: ${money(Number(window.portalProfile?.balance_vnd||0))}`,okText:'XÁC NHẬN MUA KEY',cancelText:'ĐÓNG'});
+       showErr('m có đủ tiền chó đâu mà mua');
+       return;
+     }
+     openModal({type:'buy-key',pid,icon:'🔐',title:'Xác nhận mua key',sub:`Bạn đang chuẩn bị mua ${name}.`,note:'Sau khi xác nhận, hệ thống sẽ trừ số dư và gắn key trực tiếp vào tài khoản này. Nếu đã có key đang hoạt động, bạn sẽ không thể mua thêm.',priceText:money(price),meta:`Số dư hiện tại: ${money(Number(window.portalProfile?.balance_vnd||0))}`,okText:'XÁC NHẬN MUA KEY',cancelText:'HỦY'});
+   };
+ } 
+ function updateLocks(){ const hasKey=!!(window.portalProfile&&window.portalProfile.key); $$('#portal-games .portal-game-card').forEach(card=>{ card.classList.toggle('v17-locked',!hasKey); let b=$('.v17-lock-badge',card), l=$('.v17-lock-layer',card); if(!hasKey){ if(!b){ b=document.createElement('div'); b.className='v17-lock-badge'; b.innerHTML='🔒 <span>ĐÃ KHÓA</span>'; card.appendChild(b);} if(!l){ l=document.createElement('div'); l.className='v17-lock-layer'; l.innerHTML='<div class="v17-lock-card"><b>Bạn cần mua key để sử dụng</b><p>Nhấn vào đây để mở phần mua key và kích hoạt quyền truy cập.</p></div>'; card.appendChild(l);} } else { b?.remove(); l?.remove(); } }); }
+ function patchGameOpen(){ const old=window.portalEnterGame; if(typeof old!=='function' || old.__v17) return; const f=async function(){ if(!(window.portalProfile&&window.portalProfile.key)){ gameNeedsKey(); return; } return old.apply(this,arguments); }; f.__v17=true; window.portalEnterGame=f; }
+ function bindGameLocks(){ document.addEventListener('click',e=>{ const card=e.target.closest('#portal-games .portal-game-card'); if(!card) return; if(window.portalProfile?.key) return; e.preventDefault(); e.stopPropagation(); gameNeedsKey(); },true); }
+ function patchRefresh(){ const old=window.portalRefresh; if(typeof old!=='function' || old.__v17) return; const f=async function(){ const r=await old.apply(this,arguments); requestAnimationFrame(updateLocks); return r; }; f.__v17=true; window.portalRefresh=f; }
+ function patchDynamicRender(){ const old=window.renderDynamicGamesV5; if(typeof old!=='function' || old.__v17) return; const f=function(){ const r=old.apply(this,arguments); requestAnimationFrame(updateLocks); return r; }; f.__v17=true; window.renderDynamicGamesV5=f; }
+ function cuteCopy(){ const g=$('.v16-hero-greeting .left b'); if(g) g.innerHTML='Chào mừng trở lại.<br><span>Không gian cute anime sáng VIP</span> dành cho bạn.'; const p=$('.v16-hero-greeting .left p'); if(p) p.textContent='Giao diện sáng hơn, bo tròn mềm hơn, chạm vào có phát sáng và hoa đào rơi nhẹ. Khi chưa có key, game sẽ được khóa và hướng dẫn mua key rõ ràng hơn.'; const rail=$('.v16-stickers'); if(rail) rail.innerHTML='<span class="v16-tag"><i>🌸</i> Hoa đào chạm là rơi</span><span class="v16-tag"><i>✨</i> Chạm là phát sáng</span><span class="v16-tag"><i>🔐</i> Chưa có key sẽ khóa game</span><span class="v16-tag"><i>💎</i> Key gắn trực tiếp vào tài khoản</span><span class="v16-tag"><i>🎀</i> Cute anime sáng VIP</span><span class="v16-tag"><i>🤖</i> Robot theo dõi từng bàn</span><span class="v16-tag"><i>💰</i> Nạp tiền và cộng số dư rõ ràng</span><span class="v16-tag"><i>🎮</i> Sẵn sàng thêm game mới</span>'; }
+ function init(){ ensureFx(); ensureModal(); bindTouchFx(); upgradeBuyFlow(); patchGameOpen(); bindGameLocks(); patchRefresh(); patchDynamicRender(); cuteCopy(); updateLocks(); setTimeout(()=>{cuteCopy();updateLocks();},900); }
+ if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init,{once:true}); else init();
+})();
+</script>
+
+
+<style id="v18-baccarat-live-ui">
+#v18-bcr-setup{position:fixed;inset:0;z-index:2147483646;display:none;place-items:center;padding:18px;background:rgba(235,246,250,.60);-webkit-backdrop-filter:blur(20px) saturate(1.1);backdrop-filter:blur(20px) saturate(1.1)}
+#v18-bcr-setup.on{display:grid}.v18-bcr-card{width:min(94vw,520px);max-height:min(88vh,760px);overflow:auto;padding:18px;border-radius:30px;background:linear-gradient(145deg,rgba(255,255,255,.96),rgba(244,251,253,.91));border:1px solid rgba(255,255,255,.98);box-shadow:0 30px 90px rgba(35,78,92,.20),inset 0 1px 0 white;color:#153943;position:relative}
+.v18-bcr-head{display:grid;grid-template-columns:62px minmax(0,1fr) auto;gap:12px;align-items:center}.v18-bcr-logo{width:62px;height:62px;border-radius:20px;object-fit:cover;background:linear-gradient(145deg,#fff,#edf9fb);box-shadow:0 10px 26px rgba(45,89,103,.12)}.v18-bcr-head small{display:block;color:#d45d8f;font:1000 8px 'Be Vietnam Pro';letter-spacing:.14em}.v18-bcr-head h3{margin:4px 0 3px;font:1000 25px/1 'Barlow Condensed','Be Vietnam Pro';color:#173943}.v18-bcr-head p{margin:0;color:#68818a;font:800 9px/1.45 'Be Vietnam Pro'}.v18-bcr-close{width:40px;height:40px;border-radius:14px;border:1px solid white;background:rgba(255,255,255,.82);color:#52707a;font-weight:1000;box-shadow:0 8px 20px rgba(45,89,103,.08)}
+.v18-bcr-section{margin-top:14px;padding:14px;border-radius:22px;background:linear-gradient(145deg,rgba(255,255,255,.84),rgba(241,250,253,.72));border:1px solid rgba(255,255,255,.97);box-shadow:0 10px 26px rgba(47,91,105,.08)}.v18-bcr-label{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:9px}.v18-bcr-label b{font:1000 10px 'Be Vietnam Pro';color:#285a65}.v18-bcr-label span{font:900 7px 'Be Vietnam Pro';color:#879aa2}.v18-bcr-url-row{display:grid;grid-template-columns:1fr auto;gap:8px}.v18-bcr-url{min-width:0;height:48px;border-radius:15px;border:1px solid rgba(115,183,194,.20);background:rgba(255,255,255,.86);padding:0 13px;color:#173a44;font:800 10px 'Be Vietnam Pro';outline:none}.v18-bcr-url:focus{border-color:rgba(230,107,158,.45);box-shadow:0 0 0 4px rgba(255,169,207,.10)}.v18-bcr-paste{min-width:78px;border:1px solid white;border-radius:15px;background:linear-gradient(145deg,#fff,#ffeaf3);color:#a84f75;font:1000 9px 'Be Vietnam Pro';box-shadow:0 8px 18px rgba(56,95,108,.07)}
+.v18-bcr-tables{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;max-height:240px;overflow:auto;padding:2px}.v18-bcr-table{min-height:52px;padding:8px;border-radius:15px;border:1px solid rgba(255,255,255,.98);background:rgba(255,255,255,.76);color:#476c76;font:900 8px/1.25 'Be Vietnam Pro';box-shadow:0 7px 16px rgba(49,92,106,.07);text-align:center}.v18-bcr-table.on{background:linear-gradient(145deg,#ffe5f0,#e5fbfb 58%,#eeeaff);color:#173d48;box-shadow:0 10px 24px rgba(69,113,126,.12),0 0 0 2px rgba(235,122,171,.16)}.v18-bcr-table small{display:block;margin-top:3px;color:#879aa2;font-size:6.5px}.v18-bcr-manual{display:grid;grid-template-columns:1fr auto;gap:7px;margin-top:8px}.v18-bcr-manual input{height:42px;border-radius:14px;border:1px solid rgba(113,179,191,.18);background:#fff;padding:0 12px;color:#173a44;font:800 9px 'Be Vietnam Pro'}.v18-bcr-manual button{border:1px solid white;border-radius:14px;background:#f5fbfd;color:#40717b;font:1000 8px 'Be Vietnam Pro'}
+.v18-bcr-status{min-height:18px;margin-top:9px;color:#6e858e;font:850 8px/1.45 'Be Vietnam Pro';text-align:center}.v18-bcr-status.err{color:#a13b61}.v18-bcr-actions{display:grid;grid-template-columns:.7fr 1.3fr;gap:9px;margin-top:14px}.v18-bcr-actions button{min-height:50px;border-radius:18px;border:1px solid white;font:1000 10px 'Be Vietnam Pro';box-shadow:0 10px 24px rgba(53,94,108,.09)}.v18-bcr-cancel{background:rgba(255,255,255,.84);color:#54727c}.v18-bcr-open{background:linear-gradient(145deg,#ffe1ee,#e0fcfc 56%,#e9e6ff);color:#173943}.v18-bcr-open:disabled{opacity:.55}
+#v18-bcr-dock{position:fixed;z-index:3000225;right:12px;top:max(12px,env(safe-area-inset-top));display:none;align-items:center;gap:7px;padding:7px 8px 7px 10px;border-radius:18px;background:rgba(249,254,255,.88);border:1px solid white;box-shadow:0 12px 30px rgba(34,77,91,.17);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);color:#173943}.v18-bcr-in #v18-bcr-dock{display:flex}.v18-bcr-dock-copy{min-width:0;max-width:160px}.v18-bcr-dock-copy small{display:block;color:#d25b8e;font:1000 6px 'Be Vietnam Pro';letter-spacing:.12em}.v18-bcr-dock-copy b{display:block;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font:1000 9px 'Be Vietnam Pro'}.v18-bcr-dock-btn{height:34px;padding:0 10px;border-radius:12px;border:1px solid white;background:linear-gradient(145deg,#fff,#fff0f6);color:#9b4d70;font:1000 8px 'Be Vietnam Pro'}
+#v18-bcr-extra{display:none;margin-top:9px}.v18-bcr-analysis-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:7px}.v18-bcr-astat{padding:10px;border-radius:17px;background:linear-gradient(145deg,#fff,#f2fafc);border:1px solid white;box-shadow:0 8px 20px rgba(45,88,102,.07)}.v18-bcr-astat small{display:block;color:#7c929a;font:1000 6.5px 'Be Vietnam Pro';letter-spacing:.08em}.v18-bcr-astat b{display:block;margin-top:6px;color:#173d48;font:1000 12px 'Be Vietnam Pro'}.v18-bcr-road{display:flex;gap:4px;flex-wrap:wrap;margin-top:8px}.v18-bcr-road i{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-style:normal;font:1000 7px 'Be Vietnam Pro';border:2px solid white;box-shadow:0 4px 10px rgba(45,89,103,.09)}.v18-bcr-road i.b{background:#ffe2e7;color:#b13e50}.v18-bcr-road i.p{background:#e1efff;color:#376ba5}.v18-bcr-note{margin:7px 0 0;color:#708992;font:800 7.5px/1.5 'Be Vietnam Pro'}
+#portal-games [data-game="custom__baccarat-live"] .ultra-card-image:after,#portal-games .v5-custom-card:has([data-enter-table="custom__baccarat-live"]) .ultra-card-image:after{content:'PLAYER • BANKER';position:absolute;left:10px;bottom:10px;padding:6px 9px;border-radius:999px;background:rgba(255,255,255,.88);border:1px solid white;color:#a04d73;font:1000 7px 'Be Vietnam Pro';box-shadow:0 7px 18px rgba(45,89,103,.09)}
+@media(max-width:560px){.v18-bcr-card{padding:15px;border-radius:26px}.v18-bcr-head{grid-template-columns:52px minmax(0,1fr) auto}.v18-bcr-logo{width:52px;height:52px;border-radius:17px}.v18-bcr-head h3{font-size:22px}.v18-bcr-tables{grid-template-columns:repeat(2,minmax(0,1fr));max-height:220px}.v18-bcr-actions{grid-template-columns:1fr 1.3fr}#v18-bcr-dock{top:max(60px,calc(env(safe-area-inset-top) + 46px));right:8px}.v18-bcr-dock-copy{max-width:125px}}
+</style>
+<script id="v18-baccarat-live-js">
+(()=>{
+ const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
+ const BCR_TABLE='custom__baccarat-live', URL_KEY='tt_baccarat_game_url', TABLE_KEY='tt_baccarat_table_id', TABLE_NAME_KEY='tt_baccarat_table_name';
+ let tables=[],selected='',selectedName='',loading=false;
+ function getStored(k){try{return sessionStorage.getItem(k)||localStorage.getItem(k)||''}catch(_){return ''}}
+ function setStored(k,v){try{sessionStorage.setItem(k,v);localStorage.setItem(k,v)}catch(_){}}
+ function isHttp(v){try{const u=new URL(String(v||'').trim());return u.protocol==='http:'||u.protocol==='https:'}catch(_){return false}}
+ function gameInfo(){return (gameConfig?.custom_games||[]).find(g=>g.slug==='baccarat-live'||g.table===BCR_TABLE)||{name:'BACCARAT LIVE',image_url:'',description:'Chọn bàn Player / Banker'} }
+ function ensureSetup(){
+  if($('#v18-bcr-setup'))return;
+  const g=gameInfo(),m=document.createElement('div');m.id='v18-bcr-setup';
+  m.innerHTML=`<div class="v18-bcr-card"><div class="v18-bcr-head"><img class="v18-bcr-logo" id="v18-bcr-logo" alt="Baccarat"><div><small>BACCARAT CONTROL</small><h3>Chọn bàn & nhúng game</h3><p>Chọn bàn Player/Banker từ API, sau đó dán link game bạn muốn mở ngay trong TAIXIUTOOL.</p></div><button class="v18-bcr-close" type="button">×</button></div><div class="v18-bcr-section"><div class="v18-bcr-label"><b>🔗 LINK GAME CỦA BẠN</b><span>chỉ lưu trên thiết bị này</span></div><div class="v18-bcr-url-row"><input id="v18-bcr-url" class="v18-bcr-url" inputmode="url" autocomplete="off" placeholder="https://..."><button id="v18-bcr-paste" class="v18-bcr-paste" type="button">DÁN LINK</button></div></div><div class="v18-bcr-section"><div class="v18-bcr-label"><b>🃏 CHỌN BÀN BACCARAT</b><span id="v18-bcr-count">đang tải...</span></div><div id="v18-bcr-tables" class="v18-bcr-tables"><button class="v18-bcr-table" disabled>Đang tải danh sách bàn...</button></div><div class="v18-bcr-manual"><input id="v18-bcr-manual" placeholder="Hoặc nhập ID/tên bàn thủ công"><button id="v18-bcr-use-manual" type="button">DÙNG BÀN NÀY</button></div><div id="v18-bcr-status" class="v18-bcr-status">API Baccarat sẽ tự đồng bộ danh sách bàn nếu nguồn đang hoạt động.</div></div><div class="v18-bcr-actions"><button type="button" class="v18-bcr-cancel">ĐÓNG</button><button type="button" class="v18-bcr-open" id="v18-bcr-open">MỞ GAME + ROBOT →</button></div></div>`;
+  document.body.appendChild(m); $('.v18-bcr-close',m).onclick=closeSetup; $('.v18-bcr-cancel',m).onclick=closeSetup; m.addEventListener('click',e=>{if(e.target===m)closeSetup()});
+  $('#v18-bcr-paste',m).onclick=async()=>{try{$('#v18-bcr-url',m).value=await navigator.clipboard.readText()}catch(_){setStatus('Không đọc được clipboard. Bạn dán link trực tiếp vào ô bên cạnh.',true)}};
+  $('#v18-bcr-use-manual',m).onclick=()=>{const v=$('#v18-bcr-manual',m).value.trim();if(!v)return;selected=v;selectedName='Bàn '+v;setStored(TABLE_KEY,selected);setStored(TABLE_NAME_KEY,selectedName);renderTables();updateDock()};
+  $('#v18-bcr-open',m).onclick=openSelected;
+  const img=$('#v18-bcr-logo',m); if(g.image_url)img.src=g.image_url; else img.style.display='none';
+ }
+ function setStatus(t,err=false){const el=$('#v18-bcr-status');if(!el)return;el.textContent=t;el.classList.toggle('err',!!err)}
+ function closeSetup(){$('#v18-bcr-setup')?.classList.remove('on')}
+ async function loadTables(force=false){
+  if(loading)return;loading=true;setStatus('Đang lấy danh sách bàn từ API Baccarat...');const box=$('#v18-bcr-tables');if(box)box.innerHTML='<button class="v18-bcr-table" disabled>Đang đồng bộ...</button>';
+  try{
+   const d=await portalFetch('/api/baccarat/tables'+(force?'?r='+Date.now():''));tables=Array.isArray(d.tables)?d.tables:[];
+   if(!selected){selected=getStored(TABLE_KEY);selectedName=getStored(TABLE_NAME_KEY)}
+   if(selected&&!tables.some(x=>String(x.id)===String(selected))&&tables.length){selected='';selectedName=''}
+   if(!selected&&tables.length){selected=String(tables[0].id||'');selectedName=String(tables[0].name||selected);setStored(TABLE_KEY,selected);setStored(TABLE_NAME_KEY,selectedName)}
+   renderTables();setStatus(tables.length?`Đã nhận ${tables.length} bàn. Chọn bàn bạn muốn xem cầu.`:'API chưa trả danh sách bàn. Bạn có thể nhập ID bàn thủ công.');
+  }catch(e){tables=[];renderTables();setStatus(e?.message||'Không tải được danh sách bàn. Bạn có thể nhập ID bàn thủ công.',true)}finally{loading=false}
+ }
+ function renderTables(){const box=$('#v18-bcr-tables');if(!box)return;if(!tables.length){box.innerHTML='<button class="v18-bcr-table" disabled>Chưa có danh sách bàn từ API</button>';return}box.innerHTML=tables.map(t=>{const id=String(t.id||''),name=String(t.name||id||'Bàn');return `<button type="button" class="v18-bcr-table ${id===String(selected)?'on':''}" data-bcr-table="${encodeURIComponent(id)}">${name}<small>${id}</small></button>`}).join('');$$('[data-bcr-table]',box).forEach(b=>b.onclick=()=>{selected=decodeURIComponent(b.dataset.bcrTable||'');const t=tables.find(x=>String(x.id)===String(selected));selectedName=String(t?.name||selected);setStored(TABLE_KEY,selected);setStored(TABLE_NAME_KEY,selectedName);renderTables();updateDock()})}
+ async function openSetup(){
+  ensureSetup();const m=$('#v18-bcr-setup');m.classList.add('on');const g=gameInfo(),img=$('#v18-bcr-logo');if(img&&g.image_url){img.src=g.image_url;img.style.display='block'};
+  $('#v18-bcr-url').value=getStored(URL_KEY)||'';selected=getStored(TABLE_KEY)||selected;selectedName=getStored(TABLE_NAME_KEY)||selectedName;renderTables();await loadTables(true)
+ }
+ async function openSelected(){
+  const url=$('#v18-bcr-url')?.value.trim()||'';if(!url||!isHttp(url)){setStatus('Link game phải bắt đầu bằng http:// hoặc https://',true);return}if(!selected){setStatus('Hãy chọn một bàn Baccarat trước khi mở game.',true);return}
+  setStored(URL_KEY,url);setStored(TABLE_KEY,selected);setStored(TABLE_NAME_KEY,selectedName||selected);closeSetup();document.body.classList.add('v18-bcr-in');updateDock();
+  try{
+   if(document.body.classList.contains('portal-game-mode')&&currentTable===BCR_TABLE){const fr=$('#v9-game-iframe');if(fr&&fr.src!==url){fr.src='about:blank';requestAnimationFrame(()=>fr.src=url)};try{stopPredictionPollers?.();restartPredictionPoller?.();refreshHistory?.()}catch(_){ }return}
+   await window.portalEnterGame(BCR_TABLE,BCR_TABLE);
+  }catch(e){document.body.classList.remove('v18-bcr-in');try{portalToast?.(e?.message||'Không thể mở Baccarat','err')}catch(_){}}
+ }
+ function ensureDock(){if($('#v18-bcr-dock'))return;const d=document.createElement('div');d.id='v18-bcr-dock';d.innerHTML='<div class="v18-bcr-dock-copy"><small>BACCARAT · BÀN ĐANG XEM</small><b id="v18-bcr-dock-name">-</b></div><button type="button" class="v18-bcr-dock-btn" id="v18-bcr-change">ĐỔI BÀN</button><button type="button" class="v18-bcr-dock-btn" id="v18-bcr-road">CẦU</button>';document.body.appendChild(d);$('#v18-bcr-change').onclick=openSetup;$('#v18-bcr-road').onclick=()=>{$('#v12-analysis-sheet')?.classList.add('on')};}
+ function updateDock(){ensureDock();const n=$('#v18-bcr-dock-name');if(n)n.textContent=selectedName||getStored(TABLE_NAME_KEY)||selected||getStored(TABLE_KEY)||'Chưa chọn';}
+ function ensureAnalysis(){const sheet=$('#v12-analysis-sheet');if(!sheet||$('#v18-bcr-extra'))return;const el=document.createElement('div');el.id='v18-bcr-extra';el.innerHTML='<div class="v18-bcr-analysis-grid"><div class="v18-bcr-astat"><small>BANKER / PLAYER</small><b id="v18-bcr-split">-</b></div><div class="v18-bcr-astat"><small>TRẠNG THÁI CẦU</small><b id="v18-bcr-mode">-</b></div><div class="v18-bcr-astat"><small>NHỊP HIỆN TẠI</small><b id="v18-bcr-streak">-</b></div><div class="v18-bcr-astat"><small>TỶ LỆ ĐẢO</small><b id="v18-bcr-change-rate">-</b></div></div><div class="v18-bcr-road" id="v18-bcr-roadline"></div><p class="v18-bcr-note" id="v18-bcr-note">Cầu Baccarat chỉ dùng các phiên Player/Banker đã chốt; Tie/Hòa được bỏ khỏi tín hiệu nhị phân.</p>';sheet.appendChild(el)}
+ function renderBcr(p){ensureAnalysis();const root=$('#v18-bcr-extra');if(!root)return;const r=p?.analysis?.baccarat_road;if(p?.table!==BCR_TABLE||!r){root.style.display='none';return}root.style.display='block';$('#v18-bcr-split').textContent=`BANKER ${r.banker_pct??'-'}% · PLAYER ${r.player_pct??'-'}%`;$('#v18-bcr-mode').textContent=r.road_mode||'-';$('#v18-bcr-streak').textContent=r.streak_side?`${r.streak_side} ×${r.streak_length||1}`:'-';$('#v18-bcr-change-rate').textContent=r.change_rate!=null?`${r.change_rate}%`:'-';$('#v18-bcr-roadline').innerHTML=(r.road||[]).map(x=>`<i class="${x==='B'?'b':'p'}">${x}</i>`).join('');$('#v18-bcr-note').textContent=(selectedName||getStored(TABLE_NAME_KEY)||'Bàn Baccarat')+' · '+(r.note||'Dữ liệu cầu từ các phiên đã chốt.');const title=$('#v12-as-title');if(title)title.textContent=`${selectedName||getStored(TABLE_NAME_KEY)||'Baccarat'} · #${p.session_id||'-'}`;}
+ function patchApi(){const old=window.api;if(typeof old!=='function'||old.__v18)return;const f=function(path,opts={}){let x=String(path||'');if((x.includes('/api/predict/'+BCR_TABLE)||x.includes('/api/history?table='+encodeURIComponent(BCR_TABLE)))&&getStored(TABLE_KEY)){x+=(x.includes('?')?'&':'?')+'baccarat_table='+encodeURIComponent(getStored(TABLE_KEY))}return old.call(this,x,opts)};f.__v18=true;window.api=api=f;}
+ function patchPrediction(){const old=window.showPredictionUI;if(typeof old!=='function'||old.__v18)return;const f=function(p){const r=old.apply(this,arguments);if(p?.table===BCR_TABLE){const pred=$('#pred'),conf=$('#conf');if(pred&&p.side)pred.textContent=p.side==='T'?'BANKER':'PLAYER';if(conf)conf.textContent=`${selectedName||getStored(TABLE_NAME_KEY)||'BACCARAT'} · ${p.confidence||0}% · N${p.noise??'-'}`;renderBcr(p)}return r};f.__v18=true;window.showPredictionUI=showPredictionUI=f;}
+ function patchHistory(){const old=window.renderHist;if(typeof old!=='function'||old.__v18)return;const f=function(){const r=old.apply(this,arguments);if(currentTable===BCR_TABLE){$$('#hist .r-pred.tai,#hist .r-act.tai').forEach(x=>x.textContent='BANKER');$$('#hist .r-pred.xiu,#hist .r-act.xiu').forEach(x=>x.textContent='PLAYER');const t=$('#h-title');if(t)t.textContent='📜 '+(selectedName||getStored(TABLE_NAME_KEY)||'BACCARAT')}return r};f.__v18=true;window.renderHist=renderHist=f;}
+ function interceptCard(){document.addEventListener('click',e=>{const hit=e.target.closest('[data-enter-table="'+BCR_TABLE+'"],[data-enter-game="'+BCR_TABLE+'"],#portal-games [data-game="'+BCR_TABLE+'"]');if(!hit)return;if(!window.portalProfile?.key)return;e.preventDefault();e.stopPropagation();openSetup()},true)}
+ function patchExit(){const old=window.portalExitGame;if(typeof old!=='function'||old.__v18)return;const f=function(){document.body.classList.remove('v18-bcr-in');return old.apply(this,arguments)};f.__v18=true;window.portalExitGame=portalExitGame=f;}
+ function decorateCard(){const card=$('#portal-games [data-game="'+BCR_TABLE+'"]')||$('[data-enter-table="'+BCR_TABLE+'"]').closest('.portal-game-card');if(!card)return;card.dataset.v12Category='baccarat';card.dataset.v12Name=((card.querySelector('h3')?.textContent||'BACCARAT LIVE')+' baccarat player banker').toLowerCase();const p=card.querySelector('.ultra-card-copy p');if(p)p.textContent='Chọn bàn Player / Banker · nhập link game riêng · nhúng trực tiếp trong tool.';}
+ function init(){ensureSetup();ensureDock();ensureAnalysis();patchApi();patchPrediction();patchHistory();patchExit();interceptCard();decorateCard();setTimeout(decorateCard,800);setTimeout(decorateCard,1800);}
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
+})();
+</script>
+
+
+<style id="v19-no-skip-ui">
+#pred.skip{color:#6b8390!important}
+.v19-no-skip-chip{display:inline-flex;align-items:center;gap:6px;padding:6px 9px;border-radius:999px;background:rgba(255,255,255,.75);border:1px solid rgba(255,255,255,.96);color:#426b76;font:900 7px 'Be Vietnam Pro',sans-serif}
+</style>
+<script id="v19-no-skip-js">
+(()=>{
+  const old=window.showPredictionUI;
+  if(typeof old==='function'&&!old.__v19){
+    const f=function(p){
+      if(p && p.side!=='T' && p.side!=='X'){
+        p={...p, side:null, reason:(p.reason||'')+' · Đang chờ dữ liệu hợp lệ'};
+      }
+      return old.call(this,p);
+    };
+    f.__v19=true;window.showPredictionUI=f;
+  }
+})();
+</script>
+
+
+<style id="v20-professional-ui">
+:root{
+  --p20-ink:#123743;--p20-muted:#647e88;--p20-line:rgba(75,126,142,.13);
+  --p20-glass:rgba(255,255,255,.82);--p20-glass2:rgba(246,251,253,.70);
+  --p20-cyan:#2bb8c4;--p20-teal:#1d8f99;--p20-blue:#4a6ee0;--p20-green:#20a779;--p20-red:#d85d78;
+  --p20-shadow:0 18px 52px rgba(39,79,94,.11),inset 0 1px 0 rgba(255,255,255,.96);
+}
+body{font-family:'Be Vietnam Pro',system-ui,-apple-system,sans-serif!important;color:var(--p20-ink)!important}
+/* reduce decorative noise while preserving the premium feel */
+#v16-galaxy .v16-emoji{opacity:.18!important;filter:saturate(.7)!important;animation-duration:18s!important}
+#v16-galaxy .v16-emoji:nth-child(n+5){display:none!important}
+#v13-fx-layer .v13-float{display:none!important}
+.v16-sticker-board{display:none!important}
+.v12-editorial:after,.v12-anime-card:before,#portal-games .portal-game-card:after{opacity:.06!important;animation-duration:14s!important}
+
+.portal-top,.ultra-panel,.portal-game-card,.v12-home-pro,.v12-game-tools,.vqr-bank-card,.account-pro-shell,.account-pro-hero,.key-wallet-strip,.portal-deposit-box,.notice-card,.motion-showcase,.truth-card,.game-center-banner{
+  background:linear-gradient(145deg,var(--p20-glass),var(--p20-glass2))!important;
+  border:1px solid rgba(255,255,255,.95)!important;border-radius:24px!important;box-shadow:var(--p20-shadow)!important;
+  -webkit-backdrop-filter:blur(20px) saturate(1.12)!important;backdrop-filter:blur(20px) saturate(1.12)!important
+}
+.portal-page h1,.portal-page h2,.portal-page h3,.portal-game-card h3{color:var(--p20-ink)!important;letter-spacing:-.015em!important;text-shadow:none!important}
+.portal-page p,.portal-page small,.portal-game-card p{color:var(--p20-muted)!important;text-shadow:none!important}
+
+/* Professional home dashboard */
+.v20-pro-home{position:relative;overflow:hidden;padding:22px;margin:0 0 14px;border-radius:28px;background:linear-gradient(135deg,rgba(255,255,255,.90),rgba(239,250,252,.78));border:1px solid rgba(255,255,255,.97);box-shadow:0 24px 70px rgba(38,82,96,.13)}
+.v20-pro-home:before{content:'';position:absolute;inset:0;background:radial-gradient(circle at 92% 8%,rgba(43,184,196,.12),transparent 30%),radial-gradient(circle at 8% 96%,rgba(74,110,224,.08),transparent 32%);pointer-events:none}
+.v20-pro-home>*{position:relative;z-index:1}.v20-pro-kicker{display:flex;align-items:center;gap:8px;color:#3b8e99;font:1000 8px 'Be Vietnam Pro';letter-spacing:.15em;text-transform:uppercase}.v20-live-dot{width:7px;height:7px;border-radius:50%;background:#24bd86;box-shadow:0 0 0 5px rgba(36,189,134,.10)}
+.v20-pro-title{margin:10px 0 7px;font:1000 clamp(30px,7vw,48px)/.98 'Barlow Condensed','Be Vietnam Pro';color:#11343f;letter-spacing:-.02em}.v20-pro-title span{color:#288f9a}.v20-pro-desc{max-width:700px;margin:0;color:#647e88;font:750 11px/1.7 'Be Vietnam Pro'}
+.v20-status-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin-top:17px}.v20-status-card{padding:12px;border-radius:18px;background:rgba(255,255,255,.72);border:1px solid rgba(255,255,255,.96);box-shadow:0 8px 22px rgba(46,88,101,.06);min-width:0}.v20-status-card small{display:block;color:#7b929b!important;font:900 7px/1 'Be Vietnam Pro';letter-spacing:.10em}.v20-status-card b{display:block;margin-top:7px;color:#183d48;font:1000 12px/1.25 'Be Vietnam Pro';white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.v20-status-card em{display:block;margin-top:4px;color:#3f747f;font:800 7.5px/1.4 'Be Vietnam Pro';font-style:normal}
+.v20-engine-overview{display:grid;grid-template-columns:1.25fr .75fr;gap:12px;margin:14px 0}.v20-engine-card,.v20-ops-card{padding:17px;border-radius:24px;background:linear-gradient(145deg,rgba(255,255,255,.80),rgba(244,251,253,.70));border:1px solid rgba(255,255,255,.96);box-shadow:var(--p20-shadow)}
+.v20-engine-card .head,.v20-ops-card .head{display:flex;align-items:center;justify-content:space-between;gap:10px}.v20-engine-card h3,.v20-ops-card h3{margin:0;font-size:16px!important}.v20-version{padding:6px 9px;border-radius:999px;background:#e7f7f8;color:#21737c;font:1000 7px 'Be Vietnam Pro';letter-spacing:.08em}.v20-engine-points{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:12px}.v20-engine-points div{padding:10px;border-radius:15px;background:rgba(255,255,255,.66);border:1px solid rgba(255,255,255,.95)}.v20-engine-points b{display:block;color:#19424c;font-size:10px}.v20-engine-points span{display:block;margin-top:4px;color:#718891;font:750 8px/1.45 'Be Vietnam Pro'}
+.v20-source-list{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}.v20-source-chip{display:inline-flex;align-items:center;gap:6px;padding:7px 9px;border-radius:999px;background:rgba(255,255,255,.72);border:1px solid rgba(255,255,255,.96);color:#4e6f79;font:900 7px 'Be Vietnam Pro'}.v20-source-chip i{width:6px;height:6px;border-radius:50%;background:#9aacb2}.v20-source-chip.ok i{background:#22b982}.v20-source-chip.delay i{background:#e3a43b}.v20-source-chip.off i{background:#cf6a7f}
+
+/* Game center becomes a cleaner catalog */
+#portal-games .v12-game-tools{padding:11px!important;border-radius:22px!important}.v12-game-search{height:48px!important}.v12-filter{font-size:7px!important;min-height:34px!important;padding:0 11px!important}.portal-game-card{border-radius:24px!important;padding:9px!important;transition:transform .18s ease,box-shadow .22s ease!important}.portal-game-card:hover{transform:translateY(-2px)!important;box-shadow:0 22px 56px rgba(43,88,102,.13)!important}.ultra-card-image{border-radius:18px!important;overflow:hidden!important}.ultra-card-copy{padding:12px 10px 7px!important}.ultra-card-copy h3{font-size:18px!important}.ultra-card-copy p{font-size:8.5px!important;line-height:1.55!important}.portal-mode-row{padding:4px 10px 10px!important}.portal-mode-btn{background:linear-gradient(145deg,rgba(255,255,255,.78),rgba(235,248,250,.72))!important;color:#255d67!important;border:1px solid rgba(255,255,255,.96)!important;border-radius:14px!important;box-shadow:0 7px 18px rgba(45,88,101,.06)!important}
+.ultra-live{background:rgba(248,255,253,.90)!important;color:#27806d!important;border:1px solid white!important}
+
+/* Deposit and key commerce */
+#portal-deposit .portal-money-input{background:rgba(255,255,255,.76)!important;color:#173c47!important;border:1px solid rgba(65,133,150,.13)!important;border-radius:18px!important}.ultra-amounts button{background:rgba(255,255,255,.70)!important;color:#416a75!important;border:1px solid rgba(255,255,255,.96)!important;border-radius:14px!important}.ultra-amounts button.on{background:linear-gradient(135deg,#dff9f6,#e6ecff)!important;color:#1b6170!important}.portal-primary,.ultra-action{border-radius:16px!important;background:linear-gradient(135deg,#2baab7,#4c72df)!important;color:white!important;box-shadow:0 11px 26px rgba(55,105,152,.19)!important}
+.portal-plan.pro-key-card{border-radius:24px!important;background:linear-gradient(145deg,rgba(255,255,255,.82),rgba(244,250,253,.72))!important;border:1px solid rgba(255,255,255,.96)!important;box-shadow:var(--p20-shadow)!important}.portal-plan.pro-key-card button{border-radius:15px!important;background:linear-gradient(135deg,#2daab6,#5878df)!important;color:white!important}
+
+/* In-game professional engine HUD */
+#v20-engine-hud{position:fixed;left:10px;top:max(48px,calc(env(safe-area-inset-top) + 44px));z-index:1000005;width:min(290px,72vw);display:none;padding:10px 11px;border-radius:18px;background:rgba(250,254,255,.88);border:1px solid rgba(255,255,255,.97);box-shadow:0 14px 34px rgba(35,77,91,.16);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);color:#173b46;pointer-events:none}body.portal-game-mode #v20-engine-hud.on{display:block}.v20-hud-top{display:flex;align-items:center;justify-content:space-between;gap:8px}.v20-hud-top b{font:1000 10px 'Be Vietnam Pro'}.v20-hud-top span{padding:4px 7px;border-radius:999px;background:#e6f7f7;color:#247580;font:1000 6px 'Be Vietnam Pro'}.v20-hud-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-top:8px}.v20-hud-grid div{padding:6px;border-radius:11px;background:rgba(255,255,255,.70);border:1px solid rgba(255,255,255,.96);text-align:center}.v20-hud-grid small{display:block;color:#83979f;font:900 5.5px 'Be Vietnam Pro';letter-spacing:.04em}.v20-hud-grid b{display:block;margin-top:3px;color:#214a55;font:1000 8px 'Be Vietnam Pro'}
+
+/* Upgrade analysis sheet */
+.v20-analysis-engine{margin-top:10px;padding:12px;border-radius:18px;background:linear-gradient(145deg,#fff,#eef9fa);border:1px solid white;box-shadow:0 8px 22px rgba(46,89,102,.07)}.v20-analysis-engine h4{margin:0 0 9px;color:#173c46;font-size:11px}.v20-analysis-row{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}.v20-analysis-row div{padding:7px;border-radius:11px;background:#f8fcfd;text-align:center}.v20-analysis-row small{display:block;color:#7c929a;font-size:5.5px;font-weight:900}.v20-analysis-row b{display:block;margin-top:3px;color:#214b56;font-size:8px}.v20-models{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}.v20-models span{padding:5px 7px;border-radius:999px;background:#eaf6f8;color:#47727b;font:900 6px 'Be Vietnam Pro'}
+
+@media(max-width:760px){.v20-status-grid{grid-template-columns:1fr 1fr}.v20-engine-overview{grid-template-columns:1fr}.v20-pro-home{padding:18px}.v20-engine-points{grid-template-columns:1fr 1fr}.v20-hud-grid{grid-template-columns:1fr 1fr}.v20-analysis-row{grid-template-columns:1fr 1fr}}
+@media(max-width:480px){.v20-pro-title{font-size:32px}.v20-pro-desc{font-size:10px}.v20-status-card{padding:10px}.v20-engine-card,.v20-ops-card{padding:14px}#v20-engine-hud{width:min(250px,76vw);padding:9px}}
+@media(prefers-reduced-motion:reduce){.portal-game-card{transition:none!important}}
+</style>
+<script id="v20-professional-ui-js">
+(()=>{
+ const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
+ let statusTimer=null,lastEngineMeta=null;
+ function installHome(){
+   const home=$('#portal-home');if(!home||$('.v20-pro-home',home))return;
+   const pro=document.createElement('section');pro.className='v20-pro-home';
+   pro.innerHTML=`<div class="v20-pro-kicker"><i class="v20-live-dot"></i> TAIXIUTOOL · PROFESSIONAL MULTI-GAME PLATFORM</div><h1 class="v20-pro-title">Một hệ thống gọn.<br><span>Mọi game, mọi phiên, một giao diện.</span></h1><p class="v20-pro-desc">Theo dõi nguồn dữ liệu, lịch sử phiên, phân tích theo từng bàn và trạng thái tài khoản trong cùng một không gian. Engine V20 giữ mô hình riêng theo game, tự hiệu chỉnh bằng kết quả đã chốt và giảm độ tin cậy khi dữ liệu nhiễu.</p><div class="v20-status-grid"><div class="v20-status-card"><small>ENGINE</small><b>V20 Adaptive</b><em id="v20-health">Đang kiểm tra…</em></div><div class="v20-status-card"><small>NGUỒN DỮ LIỆU</small><b id="v20-source-count">—</b><em id="v20-source-note">Đang đồng bộ</em></div><div class="v20-status-card"><small>TÀI KHOẢN</small><b id="v20-user">—</b><em id="v20-balance">—</em></div><div class="v20-status-card"><small>QUYỀN TRUY CẬP</small><b id="v20-key">—</b><em id="v20-key-exp">—</em></div></div>`;
+   const first=home.firstElementChild;home.insertBefore(pro,first||home.firstChild);
+   const wrap=document.createElement('section');wrap.className='v20-engine-overview';
+   wrap.innerHTML=`<div class="v20-engine-card"><div class="head"><h3>Phân tích thích ứng theo từng game</h3><span class="v20-version">ENGINE V20</span></div><div class="v20-engine-points"><div><b>Walk-forward</b><span>Đánh giá mô hình bằng các phiên đã xảy ra trước đó.</span></div><div><b>Meta ensemble</b><span>Kết hợp chuyển tiếp, ngữ cảnh, bệt, regime và bộ tự học.</span></div><div><b>Calibration</b><span>Độ tin cậy bị hạ khi hiệu suất gần đây yếu hoặc nhiễu tăng.</span></div><div><b>Per-table learning</b><span>Baccarat, Sicbo, Xóc Đĩa và game custom học độc lập theo bàn.</span></div></div></div><div class="v20-ops-card"><div class="head"><h3>Trạng thái nguồn</h3><span class="v20-version">LIVE</span></div><div class="v20-source-list" id="v20-source-list"><span class="v20-source-chip"><i></i>Đang tải nguồn…</span></div></div>`;
+   pro.insertAdjacentElement('afterend',wrap);
+   const old=$('.v16-hero-greeting',home);if(old)old.style.display='none';
+ }
+ function updateProfile(){const p=window.portalProfile||{};const u=$('#v20-user'),b=$('#v20-balance'),k=$('#v20-key'),e=$('#v20-key-exp');if(u)u.textContent=p.username||'Chưa đăng nhập';if(b)b.textContent=typeof moneyVN==='function'?moneyVN(p.balance_vnd||0):String(p.balance_vnd||0);if(k)k.textContent=p.key?'Đang hoạt động':'Chưa có key';if(e)e.textContent=p.key?.expires_at?(typeof compactTimeLeft==='function'?compactTimeLeft(p.key.expires_at):'Có hạn dùng'):'Cần key để mở game'}
+ function sourceLabel(name){const m={hu:'LC79 HŨ',md5:'LC79 MD5',sunwin:'SUNWIN',max789_hu:'MAX789 HŨ',max789_md5:'MAX789 MD5'};return m[name]||String(name||'').replace(/^custom__/,'').replaceAll('-',' ').toUpperCase()}
+ async function refreshStatus(){
+   updateProfile();
+   try{
+     const [hr,sr]=await Promise.all([fetch((window.BACKEND||location.origin)+'/health',{cache:'no-store'}),fetch((window.BACKEND||location.origin)+'/api/source-status',{cache:'no-store'})]);
+     if(hr.ok){const h=await hr.json();const el=$('#v20-health');if(el)el.textContent=h.ok?'Hệ thống hoạt động':'Đang khởi động'}
+     if(sr.ok){const d=await sr.json();const rows=Object.entries(d.sources||{});let live=0;const list=$('#v20-source-list');if(list){list.innerHTML=rows.slice(0,10).map(([name,x])=>{const configured=x?.configured!==false;const age=Number(x?.age_seconds??x?.source_age_seconds??9999);const cls=!configured?'off':age<=30?'ok':age<=120?'delay':'off';if(cls==='ok')live++;return `<span class="v20-source-chip ${cls}"><i></i>${sourceLabel(name)}</span>`}).join('')||'<span class="v20-source-chip"><i></i>Chưa có trạng thái</span>'}const c=$('#v20-source-count'),n=$('#v20-source-note');if(c)c.textContent=`${live}/${rows.length||0} nguồn`;if(n)n.textContent=rows.length?'Đồng bộ theo từng bàn':'Chưa có dữ liệu nguồn'}
+   }catch(_){const h=$('#v20-health');if(h)h.textContent='Đang kết nối lại'}
+ }
+ function installHud(){if($('#v20-engine-hud'))return;const d=document.createElement('div');d.id='v20-engine-hud';d.innerHTML='<div class="v20-hud-top"><b>ENGINE V20</b><span>ADAPTIVE</span></div><div class="v20-hud-grid"><div><small>ĐỒNG THUẬN</small><b id="v20-h-ag">—</b></div><div><small>DRIFT</small><b id="v20-h-dr">—</b></div><div><small>NHIỄU</small><b id="v20-h-no">—</b></div><div><small>MẪU</small><b id="v20-h-sa">—</b></div></div>';document.body.appendChild(d)}
+ function updateHud(p){installHud();const m=p?.engine_v20;if(!m)return;lastEngineMeta=m;const hud=$('#v20-engine-hud');hud?.classList.add('on');const set=(id,v)=>{const e=$(id);if(e)e.textContent=v};set('#v20-h-ag',(m.agreement??'—')+'%');set('#v20-h-dr',(m.drift??'—')+'%');set('#v20-h-no',(m.noise??'—')+'%');set('#v20-h-sa',m.sample??'—');updateAnalysis(m)}
+ function updateAnalysis(m){const sheet=$('#v12-analysis-sheet');if(!sheet||!m)return;let box=$('.v20-analysis-engine',sheet);if(!box){box=document.createElement('div');box.className='v20-analysis-engine';sheet.appendChild(box)}const models=(m.models||[]).map(x=>`<span>${x.name} · ${Math.round(Math.abs(Number(x.edge||0))*100)}%</span>`).join('');box.innerHTML=`<h4>Engine V20 · phân tích meta</h4><div class="v20-analysis-row"><div><small>ĐỒNG THUẬN</small><b>${m.agreement??'—'}%</b></div><div><small>DRIFT</small><b>${m.drift??'—'}%</b></div><div><small>ENTROPY</small><b>${m.entropy??'—'}%</b></div><div><small>CALIBRATION</small><b>${m.settled_calibration??'—'}%</b></div></div><div class="v20-models">${models||'<span>Đang tích dữ liệu</span>'}</div>`}
+ function wrapPrediction(){const old=window.showPredictionUI;if(typeof old!=='function'||old.__v20)return;const f=function(p){const r=old.apply(this,arguments);try{updateHud(p)}catch(_){}return r};f.__v20=true;window.showPredictionUI=f}
+ function wrapRefresh(){const old=window.portalRefresh;if(typeof old!=='function'||old.__v20)return;const f=async function(){const r=await old.apply(this,arguments);updateProfile();return r};f.__v20=true;window.portalRefresh=f}
+ function professionalCopy(){const intel=$('.v14-intel-strip');if(intel)intel.style.display='none';const hero=$('.v12-editorial');if(hero){const h=hero.querySelector('h2');if(h)h.innerHTML='Chọn game.<br><span style="color:#2a8e99">Theo dõi đúng bàn, đúng dữ liệu.</span>';const p=hero.querySelector('p');if(p)p.textContent='Kho game được sắp theo nhóm để dễ tìm. Mỗi bàn giữ lịch sử, mô hình tự học và trạng thái nguồn riêng.'}}
+ function init(){installHome();installHud();professionalCopy();wrapPrediction();wrapRefresh();refreshStatus();clearInterval(statusTimer);statusTimer=setInterval(()=>{if(!document.hidden)refreshStatus()},15000);setTimeout(()=>{installHome();professionalCopy();refreshStatus()},900)}
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
+})();
+</script>
+
+
+<style id="v21-ten-pass-professional-ui">
+/* V21 · 10-pass professional UI refinement */
+:root{--v21-ink:#143943;--v21-muted:#68828b;--v21-cyan:#5fdce2;--v21-pink:#f59abd;--v21-violet:#a7a4ef;--v21-glass:rgba(255,255,255,.78);--v21-line:rgba(255,255,255,.94);--v21-shadow:0 18px 52px rgba(39,82,95,.11)}
+html{scroll-behavior:smooth}body{letter-spacing:.001em!important}button,a,[role=button]{-webkit-tap-highlight-color:transparent}.portal-main{max-width:1180px!important;margin-inline:auto!important}
+/* 01 typography hierarchy */
+.portal-main h1,.portal-main h2,.portal-main h3{letter-spacing:-.018em}.v20-pro-title{font-size:clamp(34px,7vw,54px)!important;line-height:.94!important;max-width:820px}.v20-pro-desc{font-size:11.5px!important;line-height:1.75!important;max-width:760px!important}.v20-pro-kicker{font-size:8.5px!important}
+/* 02 hero depth */
+.v20-pro-home{padding:28px!important;border-radius:32px!important;background:linear-gradient(145deg,rgba(255,255,255,.91),rgba(243,251,253,.78) 58%,rgba(255,244,249,.70))!important;box-shadow:0 26px 80px rgba(39,81,95,.12),inset 0 1px 0 #fff!important}.v20-pro-home:after{content:'';position:absolute;width:180px;height:180px;right:-60px;bottom:-82px;border-radius:50%;background:radial-gradient(circle,rgba(245,154,189,.18),transparent 68%);pointer-events:none}
+/* 03 status cards */
+.v20-status-grid{gap:11px!important}.v20-status-card{min-height:88px;padding:14px!important;border-radius:21px!important;background:linear-gradient(145deg,rgba(255,255,255,.84),rgba(247,252,253,.68))!important;transition:.22s ease;position:relative;overflow:hidden}.v20-status-card:hover{transform:translateY(-2px);box-shadow:0 13px 28px rgba(43,88,101,.09)}.v20-status-card:before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:linear-gradient(var(--v21-cyan),var(--v21-pink));opacity:.65}.v20-status-card b{font-size:13px!important}.v20-status-card em{font-size:8px!important}
+/* 04 section consistency */
+.v20-engine-overview{gap:12px!important}.v20-engine-card,.v20-ops-card,.ultra-panel,.account-pro-shell{border-radius:26px!important;background:linear-gradient(145deg,rgba(255,255,255,.84),rgba(245,251,253,.72))!important;border:1px solid var(--v21-line)!important;box-shadow:var(--v21-shadow)!important}.v20-engine-card,.v20-ops-card{padding:18px!important}.v20-engine-points{gap:9px!important}.v20-engine-points div{border-radius:17px!important;padding:12px!important;transition:.2s ease}.v20-engine-points div:hover{background:#fff!important;transform:translateY(-1px)}
+/* 05 game center */
+#portal-games .portal-game-card{border-radius:26px!important;overflow:hidden!important;background:linear-gradient(145deg,rgba(255,255,255,.86),rgba(244,250,252,.75))!important;border:1px solid rgba(255,255,255,.98)!important;box-shadow:0 15px 38px rgba(40,82,95,.10)!important;transform:translateZ(0);transition:transform .22s cubic-bezier(.2,.8,.2,1),box-shadow .22s ease!important}#portal-games .portal-game-card:hover{transform:translateY(-3px)!important;box-shadow:0 21px 48px rgba(40,82,95,.14)!important}#portal-games .portal-game-card img{transition:transform .45s cubic-bezier(.2,.8,.2,1),filter .3s ease!important}#portal-games .portal-game-card:hover img{transform:scale(1.025);filter:saturate(1.04)}
+/* 06 navigation & controls */
+.portal-nav,.portal-tabs,.dock{backdrop-filter:blur(22px) saturate(1.15)!important;-webkit-backdrop-filter:blur(22px) saturate(1.15)!important}.portal-nav button,.portal-tabs button,.dock button{transition:.18s ease!important}.portal-primary,.portal-btn,.v17-ok{border-radius:17px!important;min-height:46px!important;box-shadow:0 9px 22px rgba(54,99,112,.09)!important}.portal-primary:active,.portal-btn:active,.dock button:active{transform:scale(.975)!important}
+/* 07 forms, key, deposit */
+.portal-input,input,select,textarea{border-radius:16px!important;outline:none!important;transition:border-color .18s ease,box-shadow .18s ease,background .18s ease!important}.portal-input:focus,input:focus,select:focus,textarea:focus{border-color:rgba(76,181,193,.42)!important;box-shadow:0 0 0 4px rgba(91,213,220,.10)!important;background:rgba(255,255,255,.94)!important}.portal-plan.pro-key-card{border-radius:24px!important;transition:.22s ease!important}.portal-plan.pro-key-card:hover{transform:translateY(-2px);box-shadow:0 18px 42px rgba(47,91,104,.11)!important}#portal-deposit .ultra-panel,#portal-keys .ultra-panel{padding:18px!important}
+/* 08 polished live chips + HUD */
+.v20-source-chip{padding:8px 10px!important;border-radius:999px!important;box-shadow:0 5px 13px rgba(49,92,104,.05);transition:.18s ease}.v20-source-chip:hover{transform:translateY(-1px)}.v20-live-dot,.v20-source-chip.ok i{animation:v21Pulse 2.2s ease-in-out infinite}@keyframes v21Pulse{50%{box-shadow:0 0 0 7px rgba(36,189,134,.07)}}#v20-engine-hud{border-radius:21px!important;background:rgba(250,254,255,.91)!important;box-shadow:0 17px 44px rgba(35,77,91,.15)!important}.v20-hud-grid div{border-radius:13px!important}
+/* 09 micro motion + skeleton shimmer */
+.v21-shimmer{position:relative;overflow:hidden}.v21-shimmer:after{content:'';position:absolute;inset:0;transform:translateX(-120%);background:linear-gradient(100deg,transparent 25%,rgba(255,255,255,.55) 48%,transparent 72%);animation:v21Shimmer 1.4s ease infinite}@keyframes v21Shimmer{to{transform:translateX(120%)}}.v21-reveal{animation:v21Reveal .45s cubic-bezier(.2,.8,.2,1) both}@keyframes v21Reveal{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+/* 10 responsive / spacing pass */
+.v21-commandbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 12px;padding:10px 12px;border-radius:19px;background:rgba(255,255,255,.70);border:1px solid rgba(255,255,255,.95);box-shadow:0 10px 26px rgba(42,84,98,.07);backdrop-filter:blur(16px)}.v21-commandbar .left{display:flex;align-items:center;gap:8px;min-width:0}.v21-commandbar .brandmark{width:34px;height:34px;display:grid;place-items:center;border-radius:13px;background:linear-gradient(145deg,#e6fbfc,#ffeaf2);font-size:17px}.v21-commandbar b{display:block;color:var(--v21-ink);font-size:10px}.v21-commandbar small{display:block;color:var(--v21-muted);font:750 7px 'Be Vietnam Pro';margin-top:2px}.v21-commandbar .right{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.v21-commandbar span{padding:6px 8px;border-radius:999px;background:rgba(255,255,255,.82);border:1px solid #fff;color:#4c737d;font:900 6.5px 'Be Vietnam Pro'}
+.v21-section-label{display:flex;align-items:end;justify-content:space-between;gap:10px;margin:17px 2px 9px}.v21-section-label b{color:#173c46;font:1000 15px 'Be Vietnam Pro'}.v21-section-label span{color:#779098;font:800 7px 'Be Vietnam Pro';text-transform:uppercase;letter-spacing:.11em}
+@media(max-width:760px){.portal-main{padding-inline:10px!important}.v20-pro-home{padding:20px!important;border-radius:27px!important}.v20-pro-title{font-size:37px!important}.v20-status-grid{gap:7px!important}.v20-status-card{min-height:78px}.v21-commandbar{align-items:flex-start}.v21-commandbar .right{max-width:48%}}
+@media(max-width:480px){.v20-pro-home{padding:17px!important}.v20-pro-title{font-size:32px!important}.v20-pro-desc{font-size:10px!important}.v20-engine-card,.v20-ops-card{padding:14px!important;border-radius:22px!important}.v21-commandbar small{display:none}.v21-commandbar span:nth-child(n+3){display:none}#portal-games .portal-game-card{border-radius:22px!important}}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}.v20-live-dot,.v20-source-chip.ok i,.v21-shimmer:after,.v21-reveal{animation:none!important}}
+</style>
+<script id="v21-ten-pass-professional-js">
+(()=>{const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
+function commandbar(){const home=$('#portal-home');if(!home||$('.v21-commandbar',home))return;const x=document.createElement('div');x.className='v21-commandbar v21-reveal';x.innerHTML='<div class="left"><div class="brandmark">✦</div><div><b>TAIXIUTOOL WORKSPACE</b><small>Multi-game · live data · adaptive engine</small></div></div><div class="right"><span>● LIVE</span><span>ENGINE V20</span><span>SECURE</span></div>';home.insertBefore(x,home.firstChild)}
+function sectionLabels(){const home=$('#portal-home');if(!home)return;const engine=$('.v20-engine-overview',home);if(engine&&!engine.previousElementSibling?.classList?.contains('v21-section-label')){const l=document.createElement('div');l.className='v21-section-label v21-reveal';l.innerHTML='<b>Trung tâm vận hành</b><span>ENGINE & DATA STATUS</span>';engine.before(l)}const games=$('#portal-games');if(games&&!$('.v21-games-label',games)){const l=document.createElement('div');l.className='v21-section-label v21-games-label';l.innerHTML='<b>Kho game</b><span>CHỌN GAME · CHỌN BÀN</span>';games.insertBefore(l,games.firstChild)}}
+function reveal(){[$('.v20-pro-home'),$('.v20-engine-overview'),...$$('#portal-games .portal-game-card')].filter(Boolean).slice(0,18).forEach((x,i)=>{x.classList.add('v21-reveal');x.style.animationDelay=Math.min(i*22,220)+'ms'})}
+function shimmerWhileLoading(){const ids=['#v20-health','#v20-source-count'];ids.forEach(id=>{const e=$(id);if(!e)return;const c=e.closest('.v20-status-card');if(c&&/Đang|—/.test(e.textContent||''))c.classList.add('v21-shimmer');else c?.classList.remove('v21-shimmer')})}
+function polishCopy(){const k=$('.v20-pro-kicker');if(k)k.innerHTML='<i class="v20-live-dot"></i> TAIXIUTOOL · PROFESSIONAL WORKSPACE';const t=$('.v20-pro-title');if(t)t.innerHTML='Một workspace chuyên nghiệp.<br><span>Game, dữ liệu và phân tích ở cùng một nơi.</span>';const d=$('.v20-pro-desc');if(d)d.textContent='Giao diện được tối ưu lại theo hướng dashboard: ưu tiên trạng thái quan trọng, giảm chi tiết thừa, giữ từng game và từng bàn tách biệt để theo dõi nhanh trên cả điện thoại lẫn máy tính.'}
+function observe(){const mo=new MutationObserver(()=>{shimmerWhileLoading();sectionLabels()});mo.observe(document.body,{subtree:true,childList:true,characterData:true})}
+function init(){commandbar();sectionLabels();polishCopy();reveal();shimmerWhileLoading();observe();setTimeout(()=>{commandbar();sectionLabels();reveal();shimmerWhileLoading()},900)}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init()})();
+</script>
+
+
+<style id="v22-robot-motion-system">
+#robot{--rb-cyan:#72ecff;--rb-pink:#ff93c9;--rb-violet:#9b8cff;--rb-green:#7dffc6}
+#robot .robot-visual-group{animation:v22RobotHover 3.1s ease-in-out infinite;filter:drop-shadow(0 12px 16px rgba(43,171,204,.15));transform-style:preserve-3d}
+#robot .wrap{position:relative!important;isolation:isolate}
+#robot .wrap:before{content:"";position:absolute;inset:8%;border-radius:50%;z-index:-1;background:conic-gradient(from 0deg,transparent,rgba(114,236,255,.38),transparent 34%,rgba(255,147,201,.34),transparent 68%,rgba(155,140,255,.34),transparent);filter:blur(7px);animation:v22AuraSpin 5.4s linear infinite,v22AuraPulse 2.2s ease-in-out infinite}
+#robot .wrap:after{content:"";position:absolute;left:20%;right:20%;bottom:3%;height:12%;border-radius:50%;z-index:-2;background:radial-gradient(ellipse,rgba(100,220,255,.34),transparent 70%);filter:blur(5px);animation:v22ShadowBreath 2.6s ease-in-out infinite}
+#robot .wrap img{animation:v22RobotBreath 2.8s ease-in-out infinite;transform-origin:50% 62%;will-change:transform,filter}
+#robot.v22-thinking .wrap img{animation:v22Think .72s ease-in-out infinite}
+#robot.v22-thinking .wrap:before{animation-duration:1.15s;filter:blur(5px);opacity:1}
+#robot.v22-result-t .wrap img{animation:v22CelebrateT .72s cubic-bezier(.2,.9,.25,1)}
+#robot.v22-result-x .wrap img{animation:v22CelebrateX .72s cubic-bezier(.2,.9,.25,1)}
+#robot.v22-alert .wrap img{animation:v22Alert .48s ease-in-out 2}
+#robot .robot-side-hud{overflow:visible!important}
+#robot .robot-side-hud:after{content:"";position:absolute;inset:-1px;border-radius:inherit;pointer-events:none;background:linear-gradient(105deg,transparent 20%,rgba(255,255,255,.34) 48%,transparent 72%);transform:translateX(-125%);animation:v22HudScan 4.8s ease-in-out infinite}
+#robot #pred{transition:transform .24s ease,filter .24s ease,text-shadow .24s ease!important}
+#robot.v22-pop #pred{animation:v22PredPop .5s cubic-bezier(.2,.9,.25,1)}
+#robot .pfill{position:relative;overflow:hidden}
+#robot .pfill:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.72),transparent);transform:translateX(-130%);animation:v22BarScan 2.2s linear infinite}
+.v22-rbot-particle{position:fixed;z-index:2147483638;pointer-events:none;will-change:transform,opacity;animation:v22Particle var(--dur,1100ms) cubic-bezier(.18,.78,.25,1) forwards;font-size:var(--sz,15px);filter:drop-shadow(0 0 8px rgba(255,255,255,.8))}
+.v22-rbot-ring{position:fixed;z-index:2147483637;pointer-events:none;width:20px;height:20px;border-radius:50%;border:2px solid rgba(112,235,255,.65);transform:translate(-50%,-50%) scale(.2);animation:v22Ring .8s ease-out forwards}
+.v22-rbot-spark{position:absolute;width:5px;height:5px;border-radius:50%;background:#fff;box-shadow:0 0 8px var(--rb-cyan),0 0 14px var(--rb-pink);pointer-events:none;animation:v22Orbit 2.8s linear infinite}
+.v22-rbot-spark.s1{left:5%;top:20%;animation-delay:-.5s}.v22-rbot-spark.s2{right:4%;top:35%;animation-delay:-1.2s}.v22-rbot-spark.s3{left:48%;bottom:1%;animation-delay:-2s}
+@keyframes v22RobotHover{0%,100%{translate:0 0}50%{translate:0 -7px}}
+@keyframes v22RobotBreath{0%,100%{transform:scale(1) rotate(-.6deg);filter:brightness(1)}50%{transform:scale(1.035) rotate(.8deg);filter:brightness(1.08)}}
+@keyframes v22AuraSpin{to{transform:rotate(360deg)}} @keyframes v22AuraPulse{50%{opacity:.55;scale:1.08}}
+@keyframes v22ShadowBreath{50%{transform:scaleX(.78);opacity:.5}}
+@keyframes v22Think{0%,100%{transform:translateX(-2px) rotate(-2deg) scale(1.02)}50%{transform:translateX(2px) rotate(2deg) scale(1.05)}}
+@keyframes v22CelebrateT{0%{transform:scale(1)}32%{transform:translateY(-11px) rotate(-7deg) scale(1.1)}58%{transform:translateY(2px) rotate(6deg) scale(1.04)}100%{transform:scale(1)}}
+@keyframes v22CelebrateX{0%{transform:scale(1)}30%{transform:translateY(-9px) rotate(7deg) scale(1.1)}60%{transform:translateY(1px) rotate(-6deg) scale(1.04)}100%{transform:scale(1)}}
+@keyframes v22Alert{25%{transform:translateX(-5px) rotate(-3deg)}75%{transform:translateX(5px) rotate(3deg)}}
+@keyframes v22HudScan{0%,70%{transform:translateX(-125%)}100%{transform:translateX(125%)}}
+@keyframes v22PredPop{0%{transform:scale(.76);filter:blur(2px)}65%{transform:scale(1.13);filter:blur(0)}100%{transform:scale(1)}}
+@keyframes v22BarScan{to{transform:translateX(130%)}}
+@keyframes v22Particle{0%{transform:translate3d(var(--x0),var(--y0),0) scale(.5) rotate(0);opacity:1}100%{transform:translate3d(var(--x1),var(--y1),0) scale(1.15) rotate(var(--rot,180deg));opacity:0}}
+@keyframes v22Ring{to{transform:translate(-50%,-50%) scale(5.2);opacity:0}}
+@keyframes v22Orbit{0%{transform:rotate(0deg) translateX(7px) scale(.7);opacity:.3}50%{opacity:1}100%{transform:rotate(360deg) translateX(7px) scale(.7);opacity:.3}}
+@media(prefers-reduced-motion:reduce){#robot .robot-visual-group,#robot .wrap:before,#robot .wrap:after,#robot .wrap img,#robot .robot-side-hud:after,#robot .pfill:after,.v22-rbot-spark{animation:none!important}.v22-rbot-particle,.v22-rbot-ring{display:none!important}}
+</style>
+<script id="v22-robot-motion-js">
+(()=>{
+ const $=(s,r=document)=>r.querySelector(s);
+ let lastSide='', lastPredText='', thinkingTimer=0;
+ function robot(){return $('#robot')}
+ function center(){
+   const r=robot()?.getBoundingClientRect();
+   return r?{x:r.left+r.width*.48,y:r.top+r.height*.43}:null;
+ }
+ function particles(kind='spark',count=9){
+   const c=center(); if(!c)return;
+   const icons=kind==='t'?['⚡','✨','💙','🎯']:kind==='x'?['🌸','✨','💗','🫧']:kind==='think'?['✦','·','✧','🧠']:['✨','✦','🌸'];
+   const ring=document.createElement('i');ring.className='v22-rbot-ring';ring.style.left=c.x+'px';ring.style.top=c.y+'px';document.body.appendChild(ring);setTimeout(()=>ring.remove(),900);
+   for(let i=0;i<count;i++){
+     const e=document.createElement('i');e.className='v22-rbot-particle';e.textContent=icons[i%icons.length];
+     const a=(Math.PI*2*i/count)+(Math.random()*.35),d=38+Math.random()*62;
+     e.style.setProperty('--x0',c.x+'px');e.style.setProperty('--y0',c.y+'px');
+     e.style.setProperty('--x1',(c.x+Math.cos(a)*d)+'px');e.style.setProperty('--y1',(c.y+Math.sin(a)*d-18)+'px');
+     e.style.setProperty('--rot',(-180+Math.random()*360)+'deg');e.style.setProperty('--dur',(800+Math.random()*650)+'ms');e.style.setProperty('--sz',(11+Math.random()*9)+'px');
+     document.body.appendChild(e);setTimeout(()=>e.remove(),1600);
+   }
+ }
+ function ensureSparks(){
+   const w=$('#robot .wrap');if(!w||w.querySelector('.v22-rbot-spark'))return;
+   ['s1','s2','s3'].forEach(c=>{const i=document.createElement('i');i.className='v22-rbot-spark '+c;w.appendChild(i)});
+ }
+ function setState(type){
+   const r=robot();if(!r)return;
+   r.classList.remove('v22-thinking','v22-result-t','v22-result-x','v22-alert','v22-pop');
+   if(type)r.classList.add(type);
+ }
+ function observePrediction(){
+   const pred=$('#pred');if(!pred)return;
+   const sync=()=>{
+     const txt=(pred.textContent||'').trim().toUpperCase();
+     if(txt===lastPredText)return; lastPredText=txt;
+     const isThink=/ĐANG|LOAD|SYNC|WAIT|TÍNH/.test(txt);
+     if(isThink){setState('v22-thinking');clearTimeout(thinkingTimer);thinkingTimer=setTimeout(()=>setState(''),1300);return}
+     const side=/TÀI|BANKER|^T$/.test(txt)?'t':/XỈU|PLAYER|^X$/.test(txt)?'x':'';
+     if(side){
+       setState(side==='t'?'v22-result-t':'v22-result-x');
+       const r=robot();r?.classList.add('v22-pop');
+       if(side!==lastSide){particles(side,11);lastSide=side}else particles(side,5);
+       setTimeout(()=>setState(''),760);
+     }
+   };
+   new MutationObserver(sync).observe(pred,{childList:true,subtree:true,characterData:true,attributes:true});sync();
+ }
+ function bindRobotTap(){
+   const r=robot();if(!r||r.dataset.v22tap)return;r.dataset.v22tap='1';
+   r.addEventListener('click',e=>{if(e.target.closest('button,a,input'))return;particles('spark',12);r.classList.add('v22-pop');setTimeout(()=>r.classList.remove('v22-pop'),520)});
+   r.addEventListener('dblclick',()=>{r.classList.add('v22-alert');particles('think',15);setTimeout(()=>r.classList.remove('v22-alert'),1000)});
+ }
+ function init(){ensureSparks();observePrediction();bindRobotTap()}
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
+ setTimeout(init,900);
+})();
+</script>
+
+
+<style id="v23-max-polish">
+:root{
+ --v23-ink:#123842;--v23-muted:#6e8992;--v23-cyan:#5ee3ea;--v23-blue:#8ca6ff;
+ --v23-pink:#f6a1c4;--v23-card:rgba(255,255,255,.80);--v23-line:rgba(255,255,255,.96);
+ --v23-shadow:0 20px 60px rgba(40,83,96,.11)
+}
+html{scroll-behavior:smooth}
+body{background-attachment:fixed!important}
+.portal-main{max-width:1180px!important;margin-inline:auto!important}
+.portal-main>*{min-width:0}
+.portal-page{animation:v23PageIn .38s cubic-bezier(.2,.8,.2,1)}
+@keyframes v23PageIn{from{opacity:.72;transform:translateY(5px)}to{opacity:1;transform:none}}
+.v20-pro-home,.v20-engine-card,.v20-ops-card,.ultra-panel,.account-pro-shell,
+#portal-games .portal-game-card,.portal-card,.v21-commandbar{
+ border-color:var(--v23-line)!important;
+ box-shadow:var(--v23-shadow)!important;
+ -webkit-backdrop-filter:blur(22px) saturate(1.18)!important;
+ backdrop-filter:blur(22px) saturate(1.18)!important
+}
+.v20-pro-home{overflow:hidden}
+.v20-pro-home:before{content:"";position:absolute;inset:-1px;pointer-events:none;background:linear-gradient(115deg,rgba(94,227,234,.08),transparent 32%,rgba(246,161,196,.08) 70%,transparent);mask:linear-gradient(#000,transparent 42%)}
+#portal-games .portal-game-card{transition:transform .22s cubic-bezier(.2,.8,.2,1),box-shadow .22s ease,border-color .22s ease!important;transform:translateZ(0)}
+#portal-games .portal-game-card:hover{transform:translateY(-4px) scale(1.006)!important;box-shadow:0 25px 62px rgba(38,82,96,.15)!important}
+#portal-games .portal-game-card:active,.portal-btn:active,button:active{transform:scale(.975)!important}
+button,.portal-btn,.game-btn{touch-action:manipulation}
+input,select,textarea{transition:border-color .18s ease,box-shadow .18s ease,background .18s ease!important}
+input:focus,select:focus,textarea:focus{outline:none!important;border-color:rgba(65,195,211,.58)!important;box-shadow:0 0 0 4px rgba(77,213,224,.10)!important}
+.v23-scroll-progress{position:fixed;left:0;top:0;height:2px;width:var(--p,0%);z-index:2147483646;background:linear-gradient(90deg,var(--v23-cyan),var(--v23-blue),var(--v23-pink));box-shadow:0 0 12px rgba(94,227,234,.38);pointer-events:none}
+.v23-toast-dot{width:7px;height:7px;border-radius:50%;background:#58d7a5;box-shadow:0 0 0 5px rgba(88,215,165,.10);display:inline-block}
+.v23-livebar{display:flex;align-items:center;gap:8px;min-width:0}
+.v23-livebar strong{font:950 8px 'Be Vietnam Pro';color:#315e68;white-space:nowrap}
+.v23-livebar small{font:750 6.5px 'Be Vietnam Pro';color:#78939a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.v23-focus-ring{position:fixed;z-index:2147483640;pointer-events:none;width:18px;height:18px;border-radius:50%;border:1px solid rgba(87,211,222,.5);transform:translate(-50%,-50%) scale(.35);animation:v23tap .55s ease-out forwards}
+@keyframes v23tap{to{opacity:0;transform:translate(-50%,-50%) scale(2.8)}}
+#robot{transition:opacity .2s ease,filter .2s ease}
+#robot:hover{filter:drop-shadow(0 16px 24px rgba(55,184,211,.18))}
+#robot .robot-side-hud{box-shadow:0 18px 46px rgba(7,33,44,.20)!important}
+#hist{box-shadow:0 24px 70px rgba(0,0,0,.30)!important}
+#dock{box-shadow:0 16px 48px rgba(16,47,60,.18)!important}
+@media(max-width:760px){
+ .portal-main{padding-inline:9px!important}
+ .v21-commandbar{position:sticky;top:max(6px,env(safe-area-inset-top));z-index:40}
+ #portal-games .portal-game-card:hover{transform:none!important}
+}
+@media(prefers-reduced-motion:reduce){
+ html{scroll-behavior:auto}.portal-page{animation:none}.v23-focus-ring{display:none}
+ #portal-games .portal-game-card{transition:none!important}
+}
+</style>
+<script id="v23-max-polish-js">
+(()=>{
+ const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
+ function progress(){
+   let b=$('.v23-scroll-progress');if(!b){b=document.createElement('i');b.className='v23-scroll-progress';document.body.appendChild(b)}
+   const run=()=>{const d=document.documentElement,m=Math.max(1,d.scrollHeight-innerHeight),v=Math.max(0,Math.min(1,scrollY/m));b.style.setProperty('--p',(v*100).toFixed(2)+'%')};
+   addEventListener('scroll',run,{passive:true});addEventListener('resize',run,{passive:true});run()
+ }
+ function livebar(){
+   const bar=$('.v21-commandbar .left');if(!bar||$('.v23-livebar',bar))return;
+   const old=bar.querySelector('div:last-child');if(!old)return;
+   const sub=old.querySelector('small');if(sub)sub.textContent='Multi-game · realtime sync · adaptive analytics';
+ }
+ function tapfx(){
+   addEventListener('pointerdown',e=>{
+     if(e.pointerType==='mouse'&&e.button!==0)return;
+     const hit=e.target.closest('button,.portal-btn,.portal-game-card,#robot');
+     if(!hit)return;
+     const i=document.createElement('i');i.className='v23-focus-ring';i.style.left=e.clientX+'px';i.style.top=e.clientY+'px';document.body.appendChild(i);setTimeout(()=>i.remove(),650)
+   },{passive:true})
+ }
+ function hygiene(){
+   $$('img').forEach(x=>{if(!x.getAttribute('loading')&&!x.closest('#robot'))x.loading='lazy';x.decoding='async'});
+   $$('button').forEach(b=>{if(!b.getAttribute('type'))b.type='button'});
+   $$('[data-enter-game],.portal-game-card').forEach(x=>x.setAttribute('tabindex',x.getAttribute('tabindex')||'0'));
+ }
+ function init(){progress();livebar();tapfx();hygiene()}
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
+})();
+</script>
+
+
+<style id="v24-final-detail-system">
+:root{
+ --v24-radius-xl:26px;--v24-radius-lg:20px;--v24-radius-md:15px;
+ --v24-ease:cubic-bezier(.2,.8,.2,1);--v24-safe-b:max(10px,env(safe-area-inset-bottom));
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;text-rendering:optimizeLegibility}
+body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+button,input,select,textarea{font:inherit}
+button{cursor:pointer;-webkit-tap-highlight-color:transparent}
+img{max-width:100%}
+::selection{background:rgba(84,213,226,.22);color:inherit}
+:focus-visible{outline:2px solid rgba(55,184,211,.78)!important;outline-offset:3px!important}
+.portal-page h1,.portal-page h2,.portal-page h3{text-wrap:balance}
+.portal-page p,.portal-page small{text-wrap:pretty}
+.portal-game-card,.portal-card,.v20-pro-home,.v20-engine-card,.v20-ops-card{contain:layout paint}
+.portal-game-card img{transition:transform .38s var(--v24-ease),filter .38s ease}
+.portal-game-card:hover img{transform:scale(1.025);filter:saturate(1.05)}
+.portal-btn,button{transition:transform .15s var(--v24-ease),filter .18s ease,box-shadow .18s ease,opacity .18s ease}
+button:disabled,.portal-btn[aria-disabled="true"]{cursor:not-allowed!important;opacity:.55!important;filter:saturate(.55)!important;transform:none!important}
+input::placeholder,textarea::placeholder{opacity:.58}
+#dock{bottom:var(--v24-safe-b)!important}
+#hist{max-height:min(62vh,560px)!important}
+#hist .row{transition:background .15s ease,transform .15s ease}
+#hist .row:hover{background:rgba(255,255,255,.055)!important}
+body.light #hist .row:hover{background:rgba(45,165,190,.055)!important}
+#robot{user-select:none;-webkit-user-select:none}
+#robot .robot-side-hud{isolation:isolate}
+#robot .robot-side-hud>*{position:relative;z-index:2}
+.v24-net{
+ position:fixed;right:10px;top:max(10px,env(safe-area-inset-top));z-index:2147483630;
+ display:flex;align-items:center;gap:6px;max-width:min(62vw,250px);padding:7px 10px;border-radius:999px;
+ border:1px solid rgba(255,255,255,.92);background:rgba(255,255,255,.76);
+ box-shadow:0 10px 28px rgba(31,74,88,.10);backdrop-filter:blur(15px);-webkit-backdrop-filter:blur(15px);
+ color:#476d76;font:850 7px 'Be Vietnam Pro',sans-serif;opacity:0;transform:translateY(-8px);pointer-events:none;
+ transition:.25s var(--v24-ease)
+}
+.v24-net.on{opacity:1;transform:none}.v24-net i{width:7px;height:7px;border-radius:50%;background:#55d49c;box-shadow:0 0 0 4px rgba(85,212,156,.12)}
+.v24-net.off i{background:#ff7384;box-shadow:0 0 0 4px rgba(255,115,132,.12)}
+.v24-net.sync i{background:#61cbe2;animation:v24Pulse 1s ease-in-out infinite}
+.v24-skeleton{position:relative;overflow:hidden!important}
+.v24-skeleton:after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(100deg,transparent 20%,rgba(255,255,255,.30) 46%,transparent 72%);transform:translateX(-120%);animation:v24Skel 1.25s ease-in-out infinite}
+.v24-img-fallback{background:linear-gradient(135deg,rgba(104,229,238,.12),rgba(150,139,255,.10),rgba(246,161,196,.10))!important}
+.v24-kbd{display:inline-flex;align-items:center;justify-content:center;min-width:19px;height:19px;padding:0 5px;border-radius:6px;border:1px solid rgba(69,129,143,.15);background:rgba(255,255,255,.55);box-shadow:0 2px 0 rgba(47,92,105,.08);font:800 6.5px ui-monospace,SFMono-Regular,monospace;color:#63818a}
+@keyframes v24Pulse{50%{opacity:.35;transform:scale(.72)}}@keyframes v24Skel{to{transform:translateX(120%)}}
+@media(max-width:600px){
+ .portal-page{padding-bottom:calc(78px + env(safe-area-inset-bottom))!important}
+ .portal-game-card{border-radius:20px!important}
+ .v24-net{right:7px;top:max(7px,env(safe-area-inset-top));padding:6px 8px}
+ input,select,textarea{font-size:16px!important} /* prevents iOS focus zoom */
+}
+@media(hover:none){.portal-game-card:hover img{transform:none;filter:none}}
+@media(prefers-reduced-motion:reduce){.v24-net,.portal-game-card img,#hist .row{transition:none!important}.v24-skeleton:after,.v24-net.sync i{animation:none!important}}
+</style>
+<script id="v24-final-detail-js">
+(()=>{
+ const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
+ let netTimer=0;
+ function netEl(){
+   let n=$('.v24-net');if(!n){n=document.createElement('div');n.className='v24-net';n.innerHTML='<i></i><span></span>';document.body.appendChild(n)}return n
+ }
+ function net(msg,type='sync',hold=1800){
+   const n=netEl();n.className='v24-net on '+type;$('span',n).textContent=msg;
+   clearTimeout(netTimer);if(hold)netTimer=setTimeout(()=>n.classList.remove('on'),hold)
+ }
+ function online(){net(navigator.onLine?'Kết nối ổn định':'Mất kết nối mạng',navigator.onLine?'':'off',navigator.onLine?1200:0)}
+ function a11y(){
+   $$('button').forEach((b,i)=>{
+     if(!b.type)b.type='button';
+     if(!b.getAttribute('aria-label')){
+       const t=(b.textContent||'').replace(/\s+/g,' ').trim();
+       if(t)b.setAttribute('aria-label',t.slice(0,100))
+     }
+   });
+   $$('input,select,textarea').forEach(x=>{
+     if(!x.getAttribute('aria-label')){
+       const label=x.closest('label')?.textContent?.trim()||x.placeholder||x.name||x.id;
+       if(label)x.setAttribute('aria-label',String(label).slice(0,100))
+     }
+   });
+   $$('[data-enter-game],.portal-game-card').forEach(x=>{
+     x.setAttribute('role','button');if(!x.hasAttribute('tabindex'))x.tabIndex=0;
+   })
+ }
+ function keyboardCards(){
+   document.addEventListener('keydown',e=>{
+     const c=e.target.closest?.('[data-enter-game],.portal-game-card');
+     if(c&&(e.key==='Enter'||e.key===' ')){e.preventDefault();c.click()}
+     if(e.key==='Escape'){
+       try{document.getElementById('hist')?.classList.remove('on')}catch(_){}
+       try{document.getElementById('menu')?.classList.remove('on')}catch(_){}
+     }
+   })
+ }
+ function imageGuard(){
+   $$('img').forEach(im=>{
+     if(!im.closest('#robot')){im.loading=im.loading||'lazy';im.decoding='async'}
+     im.addEventListener('error',()=>{im.classList.add('v24-img-fallback');im.style.opacity='.72'},{once:true})
+   })
+ }
+ function fetchSignal(){
+   if(window.__v24fetch)return;window.__v24fetch=1;
+   const native=window.fetch;
+   window.fetch=async function(...args){
+     const u=String(args[0]?.url||args[0]||'');
+     const important=/\/api\/(predict|history|account|game-config|baccarat)/.test(u);
+     if(important)net('Đang đồng bộ dữ liệu…','sync',0);
+     try{
+       const r=await native.apply(this,args);
+       if(important)net(r.ok?'Đã đồng bộ':'Máy chủ phản hồi lỗi',r.ok?'':'off',r.ok?850:2200);
+       return r
+     }catch(e){if(important)net(navigator.onLine?'Không kết nối được máy chủ':'Mất kết nối mạng','off',2600);throw e}
+   }
+ }
+ function hygiene(){
+   document.documentElement.setAttribute('lang','vi');
+   document.body.classList.add('v24-ready');
+   a11y();imageGuard();keyboardCards();fetchSignal();
+   addEventListener('online',online);addEventListener('offline',online);
+ }
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',hygiene,{once:true});else hygiene();
+})();
+</script>
+
+</body>
 </html>
