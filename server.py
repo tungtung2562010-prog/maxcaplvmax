@@ -22,6 +22,14 @@ MAX789_MD5_API = os.getenv("MAX789_MD5_API", "https://person-talent-mission-open
 LC79_GAME_URL = os.getenv("LC79_GAME_URL", "https://play.lc79.bet/").strip() or "https://play.lc79.bet/"
 SUNWIN_GAME_URL = os.getenv("SUNWIN_GAME_URL", "https://sunwin.villas").strip() or "https://sunwin.villas"
 MAX789_GAME_URL = os.getenv("MAX789_GAME_URL", "https://play.max789a.vin/").strip() or "https://play.max789a.vin/"
+# V14 bundled sources. Defaults only; admin can replace them at runtime.
+V14_SUNWIN_SICBO_API = os.getenv("V14_SUNWIN_SICBO_API", "https://ent-glenn-terrain-project.trycloudflare.com/sicbo/sunwin").strip()
+V14_LC79_XOCDIA_API = os.getenv("V14_LC79_XOCDIA_API", "https://reported-prot-prefers-cattle.trycloudflare.com/api/xocdia").strip()
+V14_68GB_HU_API = os.getenv("V14_68GB_HU_API", "https://winds-fonts-seq-jaguar.trycloudflare.com/api/68/thuong").strip()
+V14_68GB_MD5_API = os.getenv("V14_68GB_MD5_API", "https://objectives-scanning-list-reliance.trycloudflare.com/api/68/md5").strip()
+V14_68GB_IMAGE = os.getenv("V14_68GB_IMAGE", "https://f4.bcbits.com/img/a3494118136_10.jpg").strip()
+V18_BACCARAT_API = os.getenv("V18_BACCARAT_API", "https://construct-vacuum-bosnia-travel.trycloudflare.com/api/bcr").strip()
+V18_BACCARAT_IMAGE = os.getenv("V18_BACCARAT_IMAGE", "https://cdn.pixabay.com/photo/2021/04/28/22/12/casino-6215082_1280.jpg").strip()
 ADMIN_SECRET = os.getenv("ADMIN_SECRET", "")
 TOKEN_SECRET = os.getenv("TOKEN_SECRET", secrets.token_hex(32))
 SESSION_SECONDS = int(os.getenv("SESSION_SECONDS", "21600"))
@@ -232,6 +240,15 @@ def init_db():
           api_url TEXT DEFAULT '',
           history_api_url TEXT DEFAULT '',
           algo_mode INTEGER NOT NULL DEFAULT 2,
+          algo_policy TEXT NOT NULL DEFAULT 'auto',
+          base_engine TEXT NOT NULL DEFAULT 'auto',
+          category TEXT NOT NULL DEFAULT 'other',
+          game_type TEXT NOT NULL DEFAULT 'tx',
+          icon TEXT NOT NULL DEFAULT '🎮',
+          result_a_label TEXT NOT NULL DEFAULT 'TÀI',
+          result_b_label TEXT NOT NULL DEFAULT 'XỈU',
+          result_a_aliases TEXT NOT NULL DEFAULT '',
+          result_b_aliases TEXT NOT NULL DEFAULT '',
           poll_seconds INTEGER NOT NULL DEFAULT 4,
           enabled INTEGER NOT NULL DEFAULT 1,
           sort_order INTEGER NOT NULL DEFAULT 100,
@@ -239,6 +256,16 @@ def init_db():
           updated_at TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_custom_games_enabled_sort ON custom_games(enabled,sort_order,name);
+        CREATE TABLE IF NOT EXISTS source_observations(
+          table_name TEXT NOT NULL,
+          session_id TEXT NOT NULL,
+          side TEXT NOT NULL,
+          total INTEGER,
+          dice_json TEXT,
+          observed_at TEXT NOT NULL,
+          PRIMARY KEY(table_name,session_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_source_observations_table ON source_observations(table_name,observed_at);
         CREATE TABLE IF NOT EXISTS background_watches(
           key_id INTEGER NOT NULL,
           device_hash TEXT NOT NULL,
@@ -255,6 +282,21 @@ def init_db():
           until_ts REAL NOT NULL
         );
         """)
+
+        # V11 dynamic-game strategy migration. Old databases are upgraded in place.
+        cgcols={r[1] for r in con.execute("PRAGMA table_info(custom_games)").fetchall()}
+        if "algo_policy" not in cgcols:
+            con.execute("ALTER TABLE custom_games ADD COLUMN algo_policy TEXT NOT NULL DEFAULT 'auto'")
+        if "base_engine" not in cgcols:
+            con.execute("ALTER TABLE custom_games ADD COLUMN base_engine TEXT NOT NULL DEFAULT 'auto'")
+        for _name,_default in [
+            ("category","other"),("game_type","tx"),("icon","🎮"),
+            ("result_a_label","TÀI"),("result_b_label","XỈU"),
+            ("result_a_aliases",""),("result_b_aliases","")]:
+            if _name not in cgcols:
+                _dv=str(_default).replace("'","''")
+                con.execute(f"ALTER TABLE custom_games ADD COLUMN {_name} TEXT NOT NULL DEFAULT '{_dv}'")
+
         # V36 privacy/security metadata migrations
         fcols={r[1] for r in con.execute("PRAGMA table_info(free_claims)").fetchall()}
         for name,typ in [("device_hash","TEXT"),("request_ip","TEXT")]:
@@ -316,6 +358,24 @@ def init_db():
                             (pname,pdays,pprice,1,psort,now_iso(),pseconds,plife))
         for sk,sv in SETTING_DEFAULTS.items():
             con.execute("INSERT OR IGNORE INTO settings(key,value,updated_at) VALUES(?,?,?)",(sk,str(sv),now_iso()))
+
+        # V14 official extension pack. INSERT OR IGNORE preserves admin edits.
+        _stamp=datetime.now(timezone.utc).isoformat()
+        _v14_games=[
+          ("sunwin-sicbo","SUNWIN SICBO","Sicbo 3 xúc xắc · Tài/Xỉu + phân bố tổng · tự học riêng","inherit:sunwin","",V14_SUNWIN_SICBO_API,"",3,"private","sunwin","sicbo","sicbo","🎲","TÀI","XỈU","tai,big,over","xiu,small,under",2,1,34),
+          ("lc79-xocdia","LC79 XÓC ĐĨA","Chẵn/Lẻ · nhận diện kết quả linh hoạt · tự học riêng","inherit:lc79","",V14_LC79_XOCDIA_API,"",3,"private","lc79","xoc-dia","xocdia","🪙","CHẴN","LẺ","chan,even,2-2,4-0,0-4","le,odd,3-1,1-3",2,1,36),
+          ("68gb-hu","68GB · HŨ XANH","68 Game Bài · bàn HŨ xanh · realtime API","",V14_68GB_IMAGE,V14_68GB_HU_API,"",3,"auto","auto","68gb","tx","💚","TÀI","XỈU","tai,big,over","xiu,small,under",3,1,42),
+          ("68gb-md5","68GB · MD5 ĐỎ","68 Game Bài · bàn MD5 đỏ · realtime API","",V14_68GB_IMAGE,V14_68GB_MD5_API,"",3,"auto","auto","68gb","tx","❤️","TÀI","XỈU","tai,big,over","xiu,small,under",3,1,43),
+          ("baccarat-live","BACCARAT LIVE","Chọn bàn · xem cầu PLAYER/BANKER · nhập link game riêng để nhúng trong tool","",V18_BACCARAT_IMAGE,V18_BACCARAT_API,"",3,"private","auto","casino","baccarat","🃏","BANKER","PLAYER","banker,bank,nha cai","player,nguoi choi",3,1,38),
+        ]
+        _sql_v14=(
+          "INSERT OR IGNORE INTO custom_games("
+          "slug,name,description,game_url,image_url,api_url,history_api_url,algo_mode,algo_policy,base_engine,"
+          "category,game_type,icon,result_a_label,result_b_label,result_a_aliases,result_b_aliases,poll_seconds,enabled,sort_order,created_at,updated_at"
+          ") VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+        )
+        for _g in _v14_games:
+            con.execute(_sql_v14,_g+(_stamp,_stamp))
 
 def now_iso(): return datetime.now(timezone.utc).isoformat()
 def get_setting(key, default=None):
@@ -2894,43 +2954,338 @@ def _v10_settled_calibration(table_name,result,force=False):
     return side,conf,str(reason or '')+f' · V10 CAL:{int(round(blended*100))}%/{n}'
 
 
-def predict_lc79_core(seq,force=False,table_name='hu'):
+def predict_lc79_core(seq,force=True,table_name='hu'):
     hist=_v61_seq_values(seq,cap=420)
-    return _v10_settled_calibration(table_name,_core_ensemble(hist,_core_candidates('lc79',table_name),mode=setting_int('lc79_algo_mode',2,1,3),force=force),force=force)
+    return _v12_regime_guard(table_name,seq,_v10_settled_calibration(table_name,_core_ensemble(hist,_core_candidates('lc79',table_name),mode=setting_int('lc79_algo_mode',2,1,3),force=force),force=force),force=force)
 
 
-def predict_sunwin_core(seq,force=False,table_name='sunwin'):
+def predict_sunwin_core(seq,force=True,table_name='sunwin'):
     hist=_v61_seq_values(seq,cap=420)
-    return _v10_settled_calibration(table_name,_core_ensemble(hist,_core_candidates('sunwin',table_name),mode=setting_int('sunwin_algo_mode',2,1,3),force=force),force=force)
+    return _v12_regime_guard(table_name,seq,_v10_settled_calibration(table_name,_core_ensemble(hist,_core_candidates('sunwin',table_name),mode=setting_int('sunwin_algo_mode',2,1,3),force=force),force=force),force=force)
 
-def predict_max789_core(seq,force=False,table_name='max789_hu'):
+def predict_max789_core(seq,force=True,table_name='max789_hu'):
     # MAX789 HŨ/MD5 share the full engine but learn patterns in isolated tables.
     hist=_v61_seq_values(seq,cap=420)
-    return _v10_settled_calibration(table_name,_core_ensemble(hist,_core_candidates('lc79',table_name),mode=setting_int('max789_algo_mode',3,1,3),force=force),force=force)
+    return _v12_regime_guard(table_name,seq,_v10_settled_calibration(table_name,_core_ensemble(hist,_core_candidates('lc79',table_name),mode=setting_int('max789_algo_mode',3,1,3),force=force),force=force),force=force)
 
 
-def _prediction_payload(table):
+_CUSTOM_ENGINE_PICK_CACHE={}
+
+def _custom_engine_candidates(base, table_name=None, include_learned=True):
+    base=str(base or 'auto').lower()
+    family='sunwin' if base=='sunwin' else 'lc79'
+    c=_core_candidates(family,table_name if include_learned else None)
+    return c
+
+def _custom_engine_backtest(hist, base, mode=2):
+    """Recent settled-only rolling score used to choose a base engine.
+    No future result is passed to the predictor for each test point.
+    """
+    if len(hist)<32:return {'base':base,'score':0.0,'accuracy':0.0,'settled':0,'coverage':0.0}
+    c=_custom_engine_candidates(base,None,False)
+    start=max(20,len(hist)-58);wins=settled=attempts=0
+    for i in range(start,len(hist)):
+        prefix=hist[:i]
+        if len(prefix)<18:continue
+        side,conf,_=_core_ensemble(prefix,c,mode=max(1,min(3,int(mode or 2))),force=False)
+        attempts+=1
+        if side in ('T','X'):
+            settled+=1
+            if side==hist[i]:wins+=1
+    acc=wins/settled if settled else 0.0
+    cov=settled/max(1,attempts)
+    # shrink accuracy toward 50% and require useful coverage
+    shrunk=(wins+5)/(settled+10) if settled else .5
+    score=(shrunk-.5)*1.7 + min(.35,cov)*.28 + min(40,settled)*.002
+    return {'base':base,'score':score,'accuracy':acc,'settled':settled,'coverage':cov}
+
+def _pick_custom_engine(row,hist,table):
+    policy=str((row or {}).get('algo_policy') or 'auto').lower()
+    explicit=str((row or {}).get('base_engine') or 'auto').lower()
+    mode=max(1,min(3,int((row or {}).get('algo_mode') or 2)))
+    if explicit in ('lc79','sunwin','max789') and policy!='auto':
+        return explicit, {'reason':'admin'}
+    if policy=='private':
+        return (explicit if explicit in ('lc79','sunwin','max789') else 'lc79'), {'reason':'private'}
+    if policy=='shared':
+        return (explicit if explicit in ('lc79','sunwin','max789') else 'lc79'), {'reason':'shared'}
+    # AUTO: choose by recent rolling validation, cached per latest sequence.
+    sig=(table,''.join(hist[-36:]),mode)
+    cached=_CUSTOM_ENGINE_PICK_CACHE.get(table)
+    now=time.time()
+    if cached and cached.get('sig')==sig and now-cached.get('ts',0)<90:
+        return cached['base'],cached['meta']
+    scores=[_custom_engine_backtest(hist,b,mode) for b in ('lc79','sunwin')]
+    best=max(scores,key=lambda x:(x['score'],x['settled']))
+    base=best['base'] if best['settled']>=5 else 'lc79'
+    meta={'reason':'auto','scores':scores,'selected':base}
+    _CUSTOM_ENGINE_PICK_CACHE[table]={'sig':sig,'ts':now,'base':base,'meta':meta}
+    return base,meta
+
+def _predict_custom_core(row,seq,table,force=True):
+    hist=_v61_seq_values(seq,cap=420)
+    policy=str((row or {}).get('algo_policy') or 'auto').lower()
+    mode=max(1,min(3,int((row or {}).get('algo_mode') or 2)))
+    base,meta=_pick_custom_engine(row,hist,table)
+    # private/auto keeps table-specific settled learner; shared uses the common family only.
+    include_learned=(policy!='shared')
+    cand=_custom_engine_candidates(base,table if include_learned else None,include_learned)
+    side,conf,reason=_core_ensemble(hist,cand,mode=mode,force=force)
+    side,conf,reason=_v12_regime_guard(table,seq,_v10_settled_calibration(table,(side,conf,reason),force=force),force=force)
+    if str((row or {}).get('game_type') or '').lower()=='baccarat':
+        side,conf,reason=_v18_baccarat_guard(hist,side,conf,reason,force=force)
+    tag=f"V11 {policy.upper()}:{base.upper()}"
+    if meta.get('reason')=='auto':
+        score=next((x for x in meta.get('scores',[]) if x.get('base')==base),{})
+        if score:tag+=f" WF {round(score.get('accuracy',0)*100)}%/{score.get('settled',0)}"
+    return side,conf,(reason or '')+' · '+tag
+
+
+
+# ============================== V20 ADAPTIVE META ENSEMBLE ==============================
+# The existing structural engine remains the primary predictor. V20 adds a second,
+# deliberately conservative layer built from already-settled sequence statistics.
+# It is designed to improve stability/calibration, not to manufacture certainty.
+_V20_META_CACHE={}
+_V20_SETTLED_CACHE={}
+
+def _v20_clamp(v,lo,hi):
+    try:return max(lo,min(hi,float(v)))
+    except Exception:return lo
+
+def _v20_bias(hist,window):
+    r=hist[-min(len(hist),int(window)):]
+    if not r:return 0.0
+    t=r.count('T');x=r.count('X')
+    return (t-x)/(max(1,len(r))+8.0)
+
+def _v20_transition(hist):
+    if len(hist)<10:return 0.0,0.0
+    target=hist[-1];t=x=2.2;support=0.0;n=len(hist)
+    start=max(1,n-180)
+    for i in range(start,n-1):
+        if hist[i]!=target:continue
+        age=n-2-i;w=0.5**(age/52.0)
+        if hist[i+1]=='T':t+=w
+        else:x+=w
+        support+=w
+    if support<1.25:return 0.0,support
+    return _v20_clamp((t-x)/(t+x),-1,1),support
+
+def _v20_ngram(hist):
+    if len(hist)<18:return 0.0,0.0
+    votes=[];n=len(hist)
+    for order in (2,3,4,5,6):
+        if n<order+7:continue
+        ctx=tuple(hist[-order:]);t=x=1.8;hits=0.0
+        for i in range(order,n-1):
+            if tuple(hist[i-order:i])!=ctx:continue
+            age=n-2-i;w=0.5**(age/(28.0+order*5.0))
+            if hist[i]=='T':t+=w
+            else:x+=w
+            hits+=w
+        if hits<1.05:continue
+        edge=(t-x)/(t+x)
+        weight=min(1.25,.26+hits/(3.4+order*.45))*(.82+order*.045)
+        votes.append((edge,weight,hits))
+    if not votes:return 0.0,0.0
+    den=sum(w for _,w,_ in votes) or 1.0
+    return _v20_clamp(sum(e*w for e,w,_ in votes)/den,-1,1),min(3.0,sum(h for _,_,h in votes)/3.0)
+
+def _v20_run_state(hist):
+    if len(hist)<24:return 0.0,0.0
+    side=hist[-1];run=1
+    for j in range(len(hist)-2,-1,-1):
+        if hist[j]==side and run<12:run+=1
+        else:break
+    t=x=1.8;support=0.0;n=len(hist)
+    for i in range(5,n-1):
+        s=hist[i];rl=1;j=i-1
+        while j>=0 and hist[j]==s and rl<12:
+            rl+=1;j-=1
+        if s!=side or abs(min(8,rl)-min(8,run))>1:continue
+        age=n-2-i;w=0.5**(age/34.0)
+        if hist[i+1]=='T':t+=w
+        else:x+=w
+        support+=w
+    if support<1.15:return 0.0,support
+    return _v20_clamp((t-x)/(t+x),-1,1),support
+
+def _v20_regime_analog(hist):
+    if len(hist)<34:return 0.0,0.0
+    n=len(hist)
+    def cr(seq,w=18):
+        r=seq[-min(w,len(seq)):]
+        if len(r)<2:return .5
+        return sum(1 for a,b in zip(r,r[1:]) if a!=b)/max(1,len(r)-1)
+    cur_cr=cr(hist,18);cur_b=_v20_bias(hist,18)
+    t=x=1.7;support=0.0
+    for i in range(20,n-1):
+        pref=hist[:i+1]
+        d=abs(cr(pref,18)-cur_cr)*1.25+abs(_v20_bias(pref,18)-cur_b)*.85
+        if d>.42:continue
+        age=n-2-i;w=(1.0/(.09+d))*0.5**(age/72.0)
+        if hist[i+1]=='T':t+=w
+        else:x+=w
+        support+=w
+    if support<1.6:return 0.0,support
+    return _v20_clamp((t-x)/(t+x),-1,1),min(4.0,support/3.0)
+
+def _v20_settled_stats(table):
+    now=time.time();c=_V20_SETTLED_CACHE.get(table)
+    if c and now-c.get('ts',0)<22:return c['data']
+    vals=[]
+    try:
+        with db() as con:
+            rows=con.execute('SELECT correct,confidence FROM global_history WHERE table_name=? AND actual IS NOT NULL AND correct IS NOT NULL ORDER BY id DESC LIMIT 120',(table,)).fetchall()
+        vals=[(int(r['correct']),int(r['confidence'] or 50)) for r in rows]
+    except Exception:vals=[]
+    n=len(vals);recent=vals[:32];mid=vals[:72]
+    def shr(rows,a=7.0,b=7.0):
+        if not rows:return .5
+        return (sum(x[0] for x in rows)+a)/(len(rows)+a+b)
+    p32=shr(recent,7,7);p72=shr(mid,10,10)
+    streak=0
+    for ok,_ in vals:
+        if ok==0:streak+=1
+        else:break
+    data={'n':n,'p32':p32,'p72':p72,'loss_streak':streak}
+    _V20_SETTLED_CACHE[table]={'ts':now,'data':data}
+    return data
+
+def _v20_adaptive_meta(table,seq,base_side,base_conf,base_reason):
+    hist=_v61_seq_values(seq,cap=420);n=len(hist)
+    if not hist:
+        return base_side,int(base_conf or 50),base_reason or '',{'version':'V20','sample':0,'agreement':0,'drift':0,'entropy':1,'models':[]}
+    sig=(str(table),n,''.join(hist[-56:]),str(base_side),int(base_conf or 50))
+    cached=_V20_META_CACHE.get(str(table));now=time.time()
+    if cached and cached.get('sig')==sig and now-cached.get('ts',0)<18:
+        return cached['result']
+
+    models=[]
+    for name,w,edge in (
+        ('BIAS12',.42,_v20_bias(hist,12)),('BIAS24',.50,_v20_bias(hist,24)),('BIAS48',.46,_v20_bias(hist,48))):
+        if abs(edge)>=.025:models.append((name,edge,w,1.0))
+    for name,fn,basew in (('TRANSITION',_v20_transition,.92),('NGRAM',_v20_ngram,1.08),('RUN-STATE',_v20_run_state,.82),('REGIME-ANALOG',_v20_regime_analog,.72)):
+        try:e,sup=fn(hist)
+        except Exception:e,sup=0.0,0.0
+        if abs(e)>=.025 and sup>.20:
+            sw=_v20_clamp(.34+sup*.22,.34,1.18)
+            models.append((name,e,basew*sw,sup))
+
+    pos=sum(w*min(1.0,.28+abs(e)) for _,e,w,_ in models if e>0)
+    neg=sum(w*min(1.0,.28+abs(e)) for _,e,w,_ in models if e<0)
+    mden=max(.001,pos+neg);agreement=max(pos,neg)/mden if models else .5
+    den=sum(w for _,_,w,_ in models) or 1.0
+    meta_edge=sum(e*w for _,e,w,_ in models)/den if models else 0.0
+
+    bsign=1.0 if base_side=='T' else -1.0 if base_side=='X' else 0.0
+    bconf=int(base_conf or 50)
+    bedge=bsign*_v20_clamp((bconf-50)/34.0,0.0,.94)
+    base_w=1.55 if base_side in ('T','X') else .45
+    meta_w=.95*_v20_clamp(.52+(agreement-.5)*1.4,.45,1.10)
+    norm=(bedge*base_w+meta_edge*meta_w)/max(.001,base_w+meta_w)
+
+    if base_side in ('T','X') and meta_edge*bsign<0 and abs(meta_edge)>=.18 and agreement>=.69 and bconf<=66 and len(models)>=4:
+        norm=.34*bedge+.66*meta_edge
+
+    if abs(norm)<.012:
+        if base_side in ('T','X'):norm=.012*bsign
+        else:
+            fb,_,_=_core_best_effort(hist);norm=.012*(1 if fb=='T' else -1)
+    side='T' if norm>=0 else 'X'
+
+    recent=hist[-12:];prev=hist[-48:-12] if len(hist)>18 else []
+    rb=(recent.count('T')-recent.count('X'))/max(1,len(recent))
+    pb=(prev.count('T')-prev.count('X'))/max(1,len(prev)) if prev else 0.0
+    drift=abs(rb-pb)
+    ent=_v68_sequence_entropy(hist[-72:]) if len(hist)>=8 else 1.0
+    diag=_v68_diagnostics(hist)
+    settled=_v20_settled_stats(str(table))
+
+    raw=50+abs(norm)*26+max(0,agreement-.5)*12+min(4.0,math.log1p(n)*.55)
+    conf=int(round(_v20_clamp(raw,50,84)))
+    if base_side in ('T','X'):conf=min(conf,max(58,bconf+4))
+    else:conf=min(conf,58)
+    if n<24:conf=min(conf,62)
+    elif n<48:conf=min(conf,68)
+    if agreement<.58:conf=min(conf,63)
+    if drift>.48:conf=min(conf,64)
+    if drift>.72:conf=min(conf,60)
+    if diag.get('noise',0)>=86:conf=min(conf,64)
+    if ent>=.93:conf=min(conf,63)
+    if settled['n']>=20:
+        cal=.62*settled['p32']+.38*settled['p72']
+        cap=int(round(_v20_clamp(55+(cal-.5)*80,55,80)))
+        conf=min(conf,cap)
+    else:cal=.5
+    if settled.get('loss_streak',0)>=4:conf=min(conf,60)
+
+    model_meta=[{'name':name,'edge':round(float(e),3),'support':round(float(sup),2)} for name,e,_,sup in sorted(models,key=lambda z:abs(z[1]*z[2]),reverse=True)[:6]]
+    meta={
+        'version':'V20','sample':n,'agreement':round(agreement*100,1),'drift':round(drift*100,1),
+        'entropy':round(float(ent)*100,1),'noise':int(diag.get('noise',0) or 0),
+        'settled_n':int(settled.get('n',0)),'settled_calibration':round(float(cal)*100,1),
+        'consensus_edge':round(float(norm),3),'models':model_meta
+    }
+    clean=str(base_reason or '').replace('BỎ QUA','').replace('SKIP','').strip(' ·')
+    reason=(' · '.join(x for x in (clean,f"V20 META {int(round(agreement*100))}%",f"DRIFT {int(round(drift*100))}%",f"CAL {int(round(cal*100))}%") if x))
+    result=(side,int(conf),reason,meta)
+    _V20_META_CACHE[str(table)]={'sig':sig,'ts':now,'result':result}
+    return result
+
+def _force_no_skip_prediction(table,seq,side,conf,reason):
+    """Final public-output guard: if an engine marks a signal too weak, still
+    return one binary side. Confidence stays deliberately low so the UI does
+    not present the fallback as a strong signal.
+    """
+    if side in ('T','X'):
+        return side,int(conf or 50),reason or ''
+    hist=_v61_seq_values(seq,cap=420)
+    fb_side,fb_conf,fb_reason=_core_best_effort(hist)
+    fb_side=fb_side if fb_side in ('T','X') else ('X' if hist and hist[-1]=='T' else 'T')
+    fb_conf=max(50,min(58,int(fb_conf or 50)))
+    clean=str(reason or '').replace('BỎ QUA','').replace('SKIP','').strip(' ·')
+    tag='NO-SKIP · TÍN HIỆU YẾU'
+    return fb_side,fb_conf,(' · '.join(x for x in (clean,fb_reason,tag) if x))
+
+def _prediction_payload(table, selected_override=None):
     if str(table).startswith('custom__'):
         row=_custom_game_by_slug(_custom_slug_from_table(table),enabled_only=True)
         if not row:raise RuntimeError('Game tùy chỉnh không tồn tại hoặc đang tắt')
-        current_data,hist_data=get_custom_upstream(table);seq=extract_any_history(hist_data)
-        if not seq:raise RuntimeError(f"{row['name']} chưa trả lịch sử T/X có session ID thật")
-        current_sid=find_sunwin_current_session(current_data)
-        hist=_v61_seq_values(seq,cap=420)
-        side,conf,reason=_v10_settled_calibration(table,_core_ensemble(hist,_core_candidates('lc79',table),mode=max(1,min(3,int(row.get('algo_mode') or 2))),force=False),force=False)
-        reason=(reason or '')+' · V10 ADAPTIVE'
+        current_data,hist_data=get_custom_upstream(table)
+        selected_table=''
+        storage_table=table
+        if str(row.get('game_type') or '').lower()=='baccarat':
+            if selected_override is not None:
+                selected_table=str(selected_override or '').strip()
+            else:
+                try:selected_table=str(request.args.get('baccarat_table') or '').strip()
+                except Exception:selected_table=''
+            if selected_table:
+                current_data=_v18_baccarat_filter(current_data,selected_table)
+                hist_data=_v18_baccarat_filter(hist_data,selected_table)
+                storage_table=_v18_baccarat_storage_table(table,selected_table)
+        _v14_store_observations(storage_table,hist_data,row)
+        if hist_data is not current_data:_v14_store_observations(storage_table,current_data,row)
+        seq_api=extract_custom_history(hist_data,row);seq_db=_v14_observed_seq(storage_table,500)
+        seq=_sort_and_dedupe_sessions(list(seq_api)+list(seq_db))
+        if not seq:raise RuntimeError(f"{row['name']} chưa có phiên thật để khởi tạo tự học")
+        current_sid=_v14_custom_current_session(current_data,row)
+        side,conf,reason=_predict_custom_core(row,seq,storage_table,force=True)
+        _v14_extra=_v14_custom_extra(hist_data,row,seq,side,conf,storage_table)
     elif table=='sunwin':
         current_data,hist_data=get_sunwin_upstream();seq=extract_sunwin_history(hist_data)
         if not seq:raise RuntimeError('SUNWIN chưa trả lịch sử có session ID thật')
-        current_sid=find_sunwin_current_session(current_data);side,conf,reason=predict_sunwin_core(seq,table_name=table)
+        current_sid=find_sunwin_current_session(current_data);side,conf,reason=predict_sunwin_core(seq,force=True,table_name=table)
     elif table in ('max789_hu','max789_md5'):
         data=get_upstream(table);seq=extract_any_history(data)
         if not seq:raise RuntimeError('MAX789 chưa trả lịch sử có session ID thật')
-        current_sid=None;side,conf,reason=predict_max789_core(seq,table_name=table)
+        current_sid=None;side,conf,reason=predict_max789_core(seq,force=True,table_name=table)
     else:
         data=get_upstream(table);seq=extract_history(data)
         if not seq:raise RuntimeError('Nguồn LC79 chưa trả lịch sử có session ID thật')
-        current_sid=None;side,conf,reason=predict_lc79_core(seq,table_name=table)
+        current_sid=None;side,conf,reason=predict_lc79_core(seq,force=True,table_name=table)
     actual_map=dict(seq);latest_sid=str(seq[0][0])
     age,fresh=_source_freshness(table,latest_sid,float(SOURCE_STALE_SECONDS))
     delayed = not fresh
@@ -2949,9 +3304,17 @@ def _prediction_payload(table):
             raise RuntimeError(f'Nguồn {table.upper()} chưa xác nhận phiên kế tiếp; đang chờ session ID thật')
         next_sid=str(head+1)
 
+    decision_table=(locals().get('storage_table') or table)
+    side,conf,reason,v20_meta=_v20_adaptive_meta(decision_table,seq,side,conf,reason)
+    side,conf,reason=_force_no_skip_prediction(decision_table,seq,side,conf,reason)
     diag=_v68_diagnostics(_v61_seq_values(seq,cap=360))
+    diag['engine_v20']=v20_meta
     diag['source_age_seconds']=int(age)
     diag['source_delayed']=bool(delayed)
+    if str(table).startswith('custom__'):
+        diag['extra']=locals().get('_v14_extra') or {}
+        diag['storage_table']=locals().get('storage_table') or table
+        diag['selected_table']=locals().get('selected_table') or ''
     if delayed:
         reason=(reason or '') + f' · nguồn chậm {int(age)}s'
     return seq,actual_map,next_sid,side,conf,reason,diag
@@ -2966,7 +3329,7 @@ def _store_for_key(kid,table,seq,actual_map,next_sid,side,conf,reason):
                 correct=None if row['side'] is None else int(row['side']==act);con.execute('UPDATE history SET actual=?,correct=? WHERE id=?',(act,correct,row['id']))
         existing=con.execute('SELECT side,confidence,reason FROM history WHERE key_id=? AND table_name=? AND session_id=? ORDER BY id DESC LIMIT 1',(kid,table,next_sid)).fetchone()
         if existing is not None:return existing['side'],int(existing['confidence'] or 50),existing['reason'] or reason
-        final_side,final_conf,final_reason=side,conf,reason
+        final_side,final_conf,final_reason=_force_no_skip_prediction(table,seq,side,conf,reason)
         if final_side is None:
             if table.startswith('custom__'):
                 _cg=_custom_game_by_slug(_custom_slug_from_table(table),enabled_only=True);mode=max(1,min(3,int((_cg or {}).get('algo_mode') or 2)))
@@ -2983,7 +3346,7 @@ def _store_for_key(kid,table,seq,actual_map,next_sid,side,conf,reason):
                     elif table in ('max789_hu','max789_md5'):cand_side,cand_conf,cand_reason=predict_max789_core(seq,force=True,table_name=table)
                     elif table.startswith('custom__'):
                         _cg=_custom_game_by_slug(_custom_slug_from_table(table),enabled_only=True)
-                        cand_side,cand_conf,cand_reason=_core_ensemble(_v61_seq_values(seq,cap=420),_core_candidates('lc79',table),mode=max(1,min(3,int((_cg or {}).get('algo_mode') or 2))),force=True)
+                        cand_side,cand_conf,cand_reason=_predict_custom_core(_cg or {},seq,table,force=True)
                     else:cand_side,cand_conf,cand_reason=predict_lc79_core(seq,force=True,table_name=table)
                     # Coverage fallback is intentionally labelled/capped; it is not promoted to a strong signal.
                     if cand_side in ('T','X') and int(cand_conf or 0)>=53:
@@ -3042,20 +3405,43 @@ def _store_global_prediction(table,seq,actual_map,next_sid,side,conf,reason):
                        VALUES(?,?,?,?,?,?,?,0)''',(table,str(next_sid),side,int(conf or 0),reason or '',stamp,json.dumps(keys,ensure_ascii=False)))
 
 
+def _background_store_snapshot(base_table, storage_table, seq, actual_map, next_sid, side, conf, reason, kids):
+    _store_global_prediction(storage_table,seq,actual_map,next_sid,side,conf,reason)
+    # Settle every active key's history from the same upstream snapshot.
+    with db() as con:
+        pending=con.execute('SELECT id,session_id,side FROM history WHERE table_name=? AND actual IS NULL',(storage_table,)).fetchall()
+        for row in pending:
+            act=actual_map.get(str(row['session_id']))
+            if act:
+                correct=None if row['side'] is None else int(row['side']==act)
+                con.execute('UPDATE history SET actual=?,correct=? WHERE id=?',(act,correct,row['id']))
+    for kid in kids:
+        _store_for_key(kid,storage_table,seq,actual_map,next_sid,side,conf,reason)
+
 def _background_table(table,kids):
     try:
+        # Baccarat is learned independently for each upstream table/room.
+        if table=='custom__baccarat-live':
+            row=_custom_game_by_slug('baccarat-live',enabled_only=True)
+            if row:
+                current,history=get_custom_upstream(table)
+                tabs=_v18_baccarat_tables(current)
+                if len(tabs)<=1 and tabs[0].get('id')=='__default__':
+                    tabs=_v18_baccarat_tables(history)
+                # Keep the worker bounded even if an upstream exposes many rooms.
+                for tab in tabs[:24]:
+                    tid=str(tab.get('id') or '').strip()
+                    if not tid or tid=='__default__':continue
+                    try:
+                        seq,actual_map,next_sid,side,conf,reason,diag=_prediction_payload(table,selected_override=tid)
+                        storage_table=str(diag.get('storage_table') or _v18_baccarat_storage_table(table,tid))
+                        _background_store_snapshot(table,storage_table,seq,actual_map,next_sid,side,conf,reason,kids)
+                    except Exception:
+                        continue
+                return None
         seq,actual_map,next_sid,side,conf,reason,diag=_prediction_payload(table)
-        _store_global_prediction(table,seq,actual_map,next_sid,side,conf,reason)
-        # Settle every active key's history from the same upstream snapshot.
-        with db() as con:
-            pending=con.execute('SELECT id,session_id,side FROM history WHERE table_name=? AND actual IS NULL',(table,)).fetchall()
-            for row in pending:
-                act=actual_map.get(str(row['session_id']))
-                if act:
-                    correct=None if row['side'] is None else int(row['side']==act)
-                    con.execute('UPDATE history SET actual=?,correct=? WHERE id=?',(act,correct,row['id']))
-        for kid in kids:
-            _store_for_key(kid,table,seq,actual_map,next_sid,side,conf,reason)
+        storage_table=str(diag.get('storage_table') or table)
+        _background_store_snapshot(table,storage_table,seq,actual_map,next_sid,side,conf,reason,kids)
     except Exception as e:
         return str(e)
     return None
@@ -3528,9 +3914,16 @@ def account_buy_key():
     with db() as con:
         plan=con.execute('SELECT * FROM plans WHERE id=? AND enabled=1',(pid,)).fetchone()
         a=con.execute('SELECT * FROM accounts WHERE id=?',(uid,)).fetchone()
+        current_key=_active_account_key(con,uid)
         if not plan:return jsonify({'detail':'Gói key không tồn tại'}),404
+        if current_key and current_key['expires_at']:
+            try:
+                if datetime.fromisoformat(current_key['expires_at'])>now:
+                    return jsonify({'detail':'Tài khoản đang có key còn hạn. Hãy dùng hết hạn key hiện tại rồi mới mua key mới.'}),409
+            except Exception:
+                return jsonify({'detail':'Tài khoản đang có key còn hạn. Hãy dùng hết hạn key hiện tại rồi mới mua key mới.'}),409
         price=int(plan['price_vnd'] or 0)
-        if int(a['balance_vnd'] or 0)<price:return jsonify({'detail':'Số dư không đủ. Hãy nạp thêm tiền.'}),402
+        if int(a['balance_vnd'] or 0)<price:return jsonify({'detail':'m có đủ tiền chó đâu mà mua'}),402
         plain='TAIXIU-'+secrets.token_urlsafe(12).replace('_','').replace('-','').upper()[:16]
         duration=int(plan['duration_seconds'] or 0) if 'duration_seconds' in plan.keys() else 0; lifetime=int(plan['lifetime'] or 0) if 'lifetime' in plan.keys() else 0; exp=now+timedelta(seconds=(3153600000 if lifetime else (duration or max(1,int(plan['days'] or 1))*86400)));label=f"{plan['name']} · {a['username']}"
         cur=con.execute('''INSERT INTO keys(key_hash,label,created_at,expires_at,enabled,max_devices,days,price_vnd,plan_id,owner_account_id)
@@ -3750,7 +4143,9 @@ def _custom_table(slug):
 
 def _custom_slug_from_table(table):
     t=str(table or '')
-    return t[len("custom__"):] if t.startswith("custom__") else ""
+    if not t.startswith("custom__"):
+        return ""
+    return t[len("custom__"):].split('::',1)[0]
 
 def _custom_games_rows(enabled_only=False):
     q="SELECT * FROM custom_games"
@@ -3765,12 +4160,32 @@ def _custom_game_by_slug(slug, enabled_only=False):
     with db() as con:r=con.execute(q,(slug,)).fetchone()
     return dict(r) if r else None
 
+def _resolve_custom_game_url(row):
+    raw=str((row or {}).get("game_url") or "").strip()
+    low=raw.lower()
+    if low=="inherit:sunwin":return get_setting("sunwin_game_url",SUNWIN_GAME_URL).strip(),"sunwin"
+    if low=="inherit:lc79":return get_setting("lc79_game_url",LC79_GAME_URL).strip(),"lc79"
+    if low=="inherit:max789":return get_setting("max789_game_url",MAX789_GAME_URL).strip(),"max789"
+    return raw,("direct" if raw else "analysis")
+
 def _custom_game_public(row):
+    resolved,parent=_resolve_custom_game_url(row)
     return {
       "slug":row["slug"],"name":row["name"],"description":row.get("description") or "",
-      "game_url":row["game_url"],"image_url":row.get("image_url") or "",
+      "game_url":resolved,"game_url_raw":str(row.get("game_url") or ""),"parent_game":parent,"analysis_only":not bool(resolved),
+      "image_url":row.get("image_url") or "",
       "enabled":bool(row.get("enabled",1)),"ready":bool((row.get("api_url") or "").strip()),
-      "algo_mode":int(row.get("algo_mode") or 2),"poll_seconds":int(row.get("poll_seconds") or 4),
+      "algo_mode":int(row.get("algo_mode") or 2),
+      "algo_policy":str(row.get("algo_policy") or "auto"),
+      "base_engine":str(row.get("base_engine") or "auto"),
+      "category":str(row.get("category") or "other"),
+      "game_type":str(row.get("game_type") or "tx"),
+      "icon":str(row.get("icon") or "🎮"),
+      "result_a_label":str(row.get("result_a_label") or "TÀI"),
+      "result_b_label":str(row.get("result_b_label") or "XỈU"),
+      "result_a_aliases":str(row.get("result_a_aliases") or ""),
+      "result_b_aliases":str(row.get("result_b_aliases") or ""),
+      "poll_seconds":int(row.get("poll_seconds") or 4),
       "table":_custom_table(row["slug"])
     }
 
@@ -3778,6 +4193,375 @@ def _custom_api_url(table):
     slug=_custom_slug_from_table(table)
     row=_custom_game_by_slug(slug,enabled_only=True) if slug else None
     return row,(row.get("api_url") or "").strip() if row else ""
+
+
+def _plain_token(v):
+    import unicodedata
+    x=str(v or '').strip().lower()
+    x=''.join(ch for ch in unicodedata.normalize('NFD',x) if unicodedata.category(ch)!='Mn')
+    return re.sub(r'[^a-z0-9]+',' ',x).strip()
+
+def _custom_alias_sets(row):
+    kind=str((row or {}).get('game_type') or 'tx').strip().lower()
+    a_label=str((row or {}).get('result_a_label') or 'TÀI')
+    b_label=str((row or {}).get('result_b_label') or 'XỈU')
+    a={_plain_token(a_label),'t','a'}; b={_plain_token(b_label),'x','b'}
+    presets={
+      'tx':({'tai','big','over','lon'},{'xiu','small','under','nho'}),
+      'sicbo':({'tai','big','over','lon'},{'xiu','small','under','nho'}),
+      'xocdia':({'chan','even'},{'le','odd'}),
+      'baccarat':({'banker','bank','nha cai'},{'player','nguoi choi'}),
+      'roulette':({'red','do'},{'black','den'}),
+      'binary':(set(),set()),
+    }
+    pa,pb=presets.get(kind,presets['binary']);a|=pa;b|=pb
+    for x in str((row or {}).get('result_a_aliases') or '').split(','):
+        if _plain_token(x):a.add(_plain_token(x))
+    for x in str((row or {}).get('result_b_aliases') or '').split(','):
+        if _plain_token(x):b.add(_plain_token(x))
+    return a,b
+
+def _v14_int(v):
+    try:
+        if isinstance(v,bool):return None
+        return int(float(str(v).strip()))
+    except Exception:return None
+
+def _v14_dice_total(item):
+    if not isinstance(item,dict):return None,None
+    low={str(k).lower():v for k,v in item.items()}
+    dice=None
+    for k in ('dice','dices','xucxac','xuc_xac','xúc_xắc','dice_values','dicevalue'):
+        v=low.get(k)
+        if isinstance(v,(list,tuple)) and len(v)>=3:
+            a=[_v14_int(x) for x in v[:3]]
+            if all(x is not None and 1<=x<=6 for x in a):dice=a;break
+    if dice is None:
+        for ks in (('xuc_xac_1','xuc_xac_2','xuc_xac_3'),('xucxac1','xucxac2','xucxac3'),('dice1','dice2','dice3'),('d1','d2','d3')):
+            if all(k in low for k in ks):
+                a=[_v14_int(low.get(k)) for k in ks]
+                if all(x is not None and 1<=x<=6 for x in a):dice=a;break
+    total=sum(dice) if dice else None
+    if total is None:
+        for k in ('tong','total','sum','point','points','score','tong_diem','total_point'):
+            if k in low:
+                n=_v14_int(low.get(k))
+                if n is not None and 3<=n<=18:total=n;break
+    return dice,total
+
+def _v14_xocdia_binary(item,row=None):
+    if not isinstance(item,dict):return None
+    low={str(k).lower():v for k,v in item.items()}
+    for k in ('chan_le','chanle','parity','even_odd','result','ketqua','ket_qua','outcome','winner','type'):
+        if k not in low:continue
+        tok=_plain_token(low[k])
+        if not tok:continue
+        if 'chan' in tok or tok=='even':return 'T'
+        if tok=='le' or ' le ' in (' '+tok+' ') or tok=='odd':return 'X'
+        m=re.search(r'(^|\s)([0-4])\s*[-:/]\s*([0-4])($|\s)',tok)
+        if m:
+            a=_v14_int(m.group(2));b=_v14_int(m.group(3))
+            if a is not None and b is not None and a+b==4:return 'T' if a%2==0 else 'X'
+    for akey,bkey in (('do','trang'),('red','white'),('red_count','white_count'),('do_count','trang_count')):
+        if akey in low and bkey in low:
+            a=_v14_int(low[akey]);b=_v14_int(low[bkey])
+            if a is not None and b is not None and a+b==4:return 'T' if a%2==0 else 'X'
+    for k in ('coins','coin','results','pieces'):
+        v=low.get(k)
+        if isinstance(v,(list,tuple)) and len(v)==4:
+            vals=[_plain_token(x) for x in v]
+            if all(vals):return 'T' if vals.count(vals[0])%2==0 else 'X'
+    return None
+
+def _v14_custom_current_session(data,row):
+    cand=[]
+    def walk(obj):
+        if isinstance(obj,dict):
+            sid=_strict_session_id(obj)
+            if sid is not None:
+                settled=normalize_custom_binary(obj,row) in ('T','X')
+                score=3+(0 if settled else 2)
+                try:n=int(str(sid));score+=2
+                except Exception:n=-1
+                cand.append((score,n,str(sid)))
+            for v in obj.values():walk(v)
+        elif isinstance(obj,list):
+            for v in obj:walk(v)
+    walk(data)
+    if not cand:return None
+    cand.sort(reverse=True);return cand[0][2]
+
+def _v14_custom_observations(data,row):
+    out={};kind=str((row or {}).get('game_type') or 'tx').lower()
+    def walk(obj):
+        if isinstance(obj,dict):
+            sid=_strict_session_id(obj);side=normalize_custom_binary(obj,row)
+            if sid is not None and side in ('T','X'):
+                dice,total=_v14_dice_total(obj) if kind=='sicbo' else (None,None)
+                rec=out.setdefault(str(sid),{'sid':str(sid),'side':side,'dice':dice,'total':total})
+                if rec.get('total') is None and total is not None:rec.update(dice=dice,total=total)
+            for v in obj.values():walk(v)
+        elif isinstance(obj,list):
+            for v in obj:walk(v)
+    walk(data);rows=list(out.values())
+    if sum(1 for x in rows if str(x['sid']).isdigit())>=max(3,int(len(rows)*.55)):
+        rows.sort(key=lambda x:int(x['sid']) if str(x['sid']).isdigit() else -1,reverse=True)
+    return rows
+
+def _v14_store_observations(table,data,row):
+    obs=_v14_custom_observations(data,row)
+    if not obs:return 0
+    stamp=now_iso();count=0
+    sql=("INSERT INTO source_observations(table_name,session_id,side,total,dice_json,observed_at) "
+         "VALUES(?,?,?,?,?,?) ON CONFLICT(table_name,session_id) DO UPDATE SET "
+         "side=excluded.side,total=COALESCE(excluded.total,source_observations.total),"
+         "dice_json=COALESCE(excluded.dice_json,source_observations.dice_json),observed_at=excluded.observed_at")
+    with db() as con:
+        for x in obs:
+            try:dice_json=json.dumps(x.get('dice'),ensure_ascii=False) if x.get('dice') else None
+            except Exception:dice_json=None
+            con.execute(sql,(table,str(x['sid']),x['side'],x.get('total'),dice_json,stamp));count+=1
+    return count
+
+def _v14_observed_rows(table,limit=500):
+    with db() as con:
+        rows=con.execute('SELECT session_id,side,total,dice_json,observed_at FROM source_observations WHERE table_name=? ORDER BY observed_at DESC LIMIT ?', (table,int(limit))).fetchall()
+    out=[]
+    for r in rows:
+        try:dice=json.loads(r['dice_json']) if r['dice_json'] else None
+        except Exception:dice=None
+        out.append({'sid':str(r['session_id']),'side':r['side'],'total':r['total'],'dice':dice,'observed_at':r['observed_at']})
+    if sum(1 for x in out if str(x['sid']).isdigit())>=max(3,int(len(out)*.55)):
+        out.sort(key=lambda x:int(x['sid']) if str(x['sid']).isdigit() else -1,reverse=True)
+    return out
+
+def _v14_observed_seq(table,limit=500):
+    return _sort_and_dedupe_sessions([(x['sid'],x['side']) for x in _v14_observed_rows(table,limit)])
+
+def _v14_sicbo_sum_forecast(data,row,table=None):
+    merged={x['sid']:x for x in (_v14_observed_rows(table,500) if table else [])}
+    for x in _v14_custom_observations(data,row):merged[str(x['sid'])]=x
+    obs=[x for x in merged.values() if isinstance(x.get('total'),int) and 3<=x['total']<=18]
+    if sum(1 for x in obs if str(x['sid']).isdigit())>=max(3,int(len(obs)*.55)):
+        obs.sort(key=lambda x:int(x['sid']) if str(x['sid']).isdigit() else -1,reverse=True)
+    if not obs:return {'sample':0,'top_totals':[],'note':'API chưa trả lịch sử tổng xúc xắc.'}
+    comb={3:1,4:3,5:6,6:10,7:15,8:21,9:25,10:27,11:27,12:25,13:21,14:15,15:10,16:6,17:3,18:1}
+    zc=sum(comb.values());prior={k:v/zc for k,v in comb.items()}
+    weighted={k:0.0 for k in comb};ws=0.0
+    for i,x in enumerate(obs[:120]):
+        w=math.exp(-i/38.0);weighted[x['total']]+=w;ws+=w
+    empirical={k:(weighted[k]/ws if ws else 0) for k in comb}
+    last=obs[0]['total'];trans={k:0.0 for k in comb};ts=0.0
+    for i in range(1,min(len(obs),100)):
+        prev,nxt=obs[i]['total'],obs[i-1]['total']
+        if abs(prev-last)<=1:
+            w=math.exp(-i/45.0);trans[nxt]+=w;ts+=w
+    transition={k:(trans[k]/ts if ts else prior[k]) for k in comb}
+    strength=min(1.0,len(obs)/80.0);tstrength=min(.28,ts/45.0);pe=.18+.20*strength;pp=1-pe-tstrength
+    dist={k:max(0.0,pp*prior[k]+pe*empirical[k]+tstrength*transition[k]) for k in comb};z=sum(dist.values()) or 1;dist={k:v/z for k,v in dist.items()}
+    tops=sorted(dist.items(),key=lambda kv:kv[1],reverse=True)[:5]
+    mean=sum(k*v for k,v in dist.items());sd=math.sqrt(sum(((k-mean)**2)*v for k,v in dist.items()))
+    big=sum(v for k,v in dist.items() if 11<=k<=17);small=sum(v for k,v in dist.items() if 4<=k<=10);n=min(24,len(obs))
+    return {'sample':len(obs),'latest_total':last,'recent_mean':round(sum(x['total'] for x in obs[:n])/n,2),'expected_total':round(mean,2),'spread':round(sd,2),'top_totals':[{'total':k,'pct':round(v*100,1)} for k,v in tops],'big_pct':round(big*100,1),'small_pct':round(small*100,1),'note':'Phân bố tổng = prior 3d6 + lịch sử đã chốt + chuyển tiếp gần đây; chỉ là thống kê tham khảo.'}
+
+def _v14_risk_plan(side,conf,has_positions=False):
+    c=int(conf or 0)
+    if side not in ('T','X') or c<58:cap=0.0
+    elif c<64:cap=.35
+    elif c<70:cap=.55
+    elif c<76:cap=.75
+    else:cap=1.0
+    return {'bankroll_cap_pct':cap,'main_share_pct':70 if has_positions and cap else (100 if cap else 0),'position_share_pct':30 if has_positions and cap else 0,'auto_bet':False,'note':'Giới hạn tham khảo trên tổng vốn; không tự động đặt cược và không tăng vốn sau thua.'}
+
+def _v14_custom_extra(data,row,seq,side,conf,table=None):
+    kind=str((row or {}).get('game_type') or 'tx').lower();extra={'game_type':kind,'learning_scope':'isolated','risk_plan':_v14_risk_plan(side,conf,kind=='sicbo')}
+    if kind=='sicbo':extra['sum_forecast']=_v14_sicbo_sum_forecast(data,row,table)
+    elif kind=='xocdia':
+        vals=_v61_seq_values(seq,cap=80);n=max(1,len(vals));extra['parity_profile']={'sample':len(vals),'even_pct':round(vals.count('T')/n*100,1),'odd_pct':round(vals.count('X')/n*100,1),'note':'Chẵn/Lẻ học riêng từ phiên đã chốt.'}
+    elif kind=='baccarat':
+        extra['baccarat_road']=_v18_baccarat_road(seq)
+        extra['risk_plan']=_v14_risk_plan(side,conf,False)
+    return extra
+
+def normalize_custom_binary(item,row):
+    if not isinstance(item,dict):return None
+    kind=str((row or {}).get('game_type') or 'tx').strip().lower()
+    if kind=='xocdia':
+        xd=_v14_xocdia_binary(item,row)
+        if xd:return xd
+    # Sicbo / Tài-Xỉu can reuse dice and total parsing safely.
+    if kind in ('tx','sicbo'):
+        tx=normalize_tx(item)
+        if tx:return tx
+    a,b=_custom_alias_sets(row)
+    low={str(k).lower():v for k,v in item.items()}
+    for k in ('result','ketqua','ket_qua','type','side','outcome','winner','win','game_result','gameresult','result_name','resultname'):
+        if k not in low:continue
+        tok=_plain_token(low[k])
+        if not tok:continue
+        if tok in a or any(x and (tok==x or tok.startswith(x+' ')) for x in a):return 'T'
+        if tok in b or any(x and (tok==x or tok.startswith(x+' ')) for x in b):return 'X'
+        # Baccarat tie / hòa is intentionally skipped instead of forced into a side.
+        if tok in ('tie','hoa','draw'):return None
+    return None
+
+def extract_custom_history(data,row):
+    rows=[]
+    def walk(obj):
+        if isinstance(obj,dict):
+            tx=normalize_custom_binary(obj,row);sid=_strict_session_id(obj)
+            if tx and sid is not None:rows.append((str(sid),tx))
+            for v in obj.values():walk(v)
+        elif isinstance(obj,list):
+            for v in obj:walk(v)
+    walk(data)
+    return _sort_and_dedupe_sessions(rows)
+
+# =============================================================
+# V18 BACCARAT TABLE DISCOVERY + PER-TABLE LEARNING
+# =============================================================
+_BCR_TABLE_KEYS=('table_id','tableid','tableId','table','table_name','tablename','tableName','room_id','roomid','roomId','room','room_name','roomName','ban','ban_id','banId','desk','desk_id','deskId')
+_BCR_NAME_KEYS=('table_name','tableName','room_name','roomName','name','title','label','desk_name','deskName')
+
+def _v18_scalar(v):
+    if isinstance(v,(str,int,float)) and not isinstance(v,bool):
+        s=str(v).strip()
+        return s[:120] if s else ''
+    return ''
+
+def _v18_table_value(obj):
+    if not isinstance(obj,dict):return ''
+    low={str(k):v for k,v in obj.items()}
+    for k in _BCR_TABLE_KEYS:
+        if k in low:
+            s=_v18_scalar(low[k])
+            if s:return s
+    return ''
+
+def _v18_table_label(obj,fallback=''):
+    if isinstance(obj,dict):
+        for k in _BCR_NAME_KEYS:
+            if k in obj:
+                s=_v18_scalar(obj[k])
+                if s:return s
+    return str(fallback or '')[:120]
+
+def _v18_baccarat_tables(data):
+    found={}
+    generic={'data','result','results','history','histories','list','items','tables','rooms','games','records','rows','payload','response'}
+    def add(t,label=''):
+        t=_v18_scalar(t)
+        if not t:return
+        key=_plain_token(t) or t.lower()
+        if key not in found:
+            found[key]={'id':t,'name':(_v18_scalar(label) or ('Bàn '+t))}
+    def walk(obj,depth=0):
+        if depth>8:return
+        if isinstance(obj,dict):
+            tv=_v18_table_value(obj)
+            if tv:add(tv,_v18_table_label(obj,tv))
+            # APIs sometimes use table ids as dictionary keys.
+            for k,v in obj.items():
+                ks=str(k).strip()
+                if isinstance(v,(dict,list)) and ks and _plain_token(ks) not in generic and len(ks)<=60:
+                    # Only promote key-like tables when the nested value looks like a table block.
+                    if isinstance(v,dict) and (_v18_table_value(v) or any(str(x).lower() in ('history','results','result','records','road') for x in v.keys())):
+                        add(ks,_v18_table_label(v,ks))
+                walk(v,depth+1)
+        elif isinstance(obj,list):
+            for v in obj[:300]:walk(v,depth+1)
+    walk(data)
+    vals=list(found.values())
+    def sk(x):
+        s=x['id']
+        try:return (0,int(float(s)))
+        except Exception:return (1,str(x['name']).lower())
+    vals.sort(key=sk)
+    if not vals:vals=[{'id':'__default__','name':'Bàn mặc định'}]
+    return vals[:80]
+
+def _v18_baccarat_filter(data,target):
+    target=str(target or '').strip()
+    if not target or target=='__default__':return data
+    target_plain=_plain_token(target)
+    def direct(obj):
+        tv=_v18_table_value(obj) if isinstance(obj,dict) else ''
+        return bool(tv and (_plain_token(tv)==target_plain or str(tv).strip()==target))
+    def find(obj,depth=0):
+        if depth>10:return None
+        if isinstance(obj,dict):
+            if direct(obj):return obj
+            # direct dictionary keyed by table id/name
+            for k,v in obj.items():
+                if (_plain_token(k)==target_plain or str(k).strip()==target) and isinstance(v,(dict,list)):
+                    return v
+            matches=[]
+            for v in obj.values():
+                r=find(v,depth+1)
+                if r is not None:matches.append(r)
+            if len(matches)==1:return matches[0]
+            if matches:return matches
+        elif isinstance(obj,list):
+            exact=[x for x in obj if isinstance(x,dict) and direct(x)]
+            if exact:return exact
+            matches=[]
+            for v in obj:
+                r=find(v,depth+1)
+                if r is not None:matches.append(r)
+            if len(matches)==1:return matches[0]
+            if matches:return matches
+        return None
+    got=find(data)
+    return got if got is not None else data
+
+def _v18_baccarat_storage_table(base,selected):
+    s=str(selected or '').strip()
+    if not s or s=='__default__':return base
+    return base+'::'+hashlib.sha1(s.encode('utf-8','ignore')).hexdigest()[:12]
+
+def _v18_baccarat_road(seq):
+    vals=_v61_seq_values(seq,cap=160)
+    if not vals:return {'sample':0,'note':'Chưa có đủ phiên Player/Banker đã chốt.'}
+    n=min(len(vals),80);recent=vals[:n];bank=recent.count('T');player=recent.count('X');den=max(1,n)
+    streak=1
+    for x in vals[1:]:
+        if x==vals[0]:streak+=1
+        else:break
+    changes=sum(1 for a,b in zip(recent,recent[1:]) if a!=b)/max(1,len(recent)-1)
+    c={'TT':0,'TX':0,'XT':0,'XX':0}
+    for prev,nxt in zip(vals[1:80],vals[:79]):c[prev+nxt]=c.get(prev+nxt,0)+1
+    bt=max(1,c['TT']+c['TX']);pt=max(1,c['XT']+c['XX'])
+    if streak>=4:mode='BỆT '+('BANKER' if vals[0]=='T' else 'PLAYER')
+    elif changes>=.68:mode='PING-PONG / ĐẢO NHANH'
+    elif changes<=.30:mode='ÍT ĐẢO / CẦU DÀI'
+    elif abs(bank-player)/den>=.22:mode='LỆCH '+('BANKER' if bank>player else 'PLAYER')
+    else:mode='TRỘN / CÂN BẰNG'
+    def window(w):
+        x=vals[:min(w,len(vals))];d=max(1,len(x))
+        return {'sample':len(x),'banker_pct':round(x.count('T')/d*100,1),'player_pct':round(x.count('X')/d*100,1)}
+    return {
+      'sample':n,'banker_pct':round(bank/den*100,1),'player_pct':round(player/den*100,1),
+      'streak_side':'BANKER' if vals[0]=='T' else 'PLAYER','streak_length':streak,
+      'change_rate':round(changes*100,1),'road_mode':mode,
+      'transition':{'banker_after_banker':round(c['TT']/bt*100,1),'player_after_banker':round(c['TX']/bt*100,1),
+                    'banker_after_player':round(c['XT']/pt*100,1),'player_after_player':round(c['XX']/pt*100,1)},
+      'windows':{'12':window(12),'24':window(24),'48':window(48)},
+      'road':[('B' if x=='T' else 'P') for x in vals[:40]],
+      'note':'Road-map mô tả BANKER/PLAYER từ các phiên đã chốt; hòa/TIE được bỏ khỏi tín hiệu nhị phân.'
+    }
+
+def _v18_baccarat_guard(hist,side,conf,reason,force=False):
+    vals=list(hist or [])[:80]
+    if side not in ('T','X'):return side,conf,reason
+    if len(vals)<18:
+        return side,min(int(conf or 0),72),str(reason or '')+' · BCR WARMUP'
+    recent=vals[:24];changes=sum(1 for a,b in zip(recent,recent[1:]) if a!=b)/max(1,len(recent)-1)
+    same=recent.count(side)/max(1,len(recent))
+    c=int(conf or 0)
+    if .42<=changes<=.62:c=min(c,68)
+    if same<.38:c=min(c,64)
+    if c<60 and not force:return None,c,str(reason or '')+' · BCR ROAD GUARD · BỎ QUA'
+    return side,c,str(reason or '')+f' · BCR ROAD CR24:{round(changes*100)}%'
 
 def get_custom_upstream(table):
     row,url=_custom_api_url(table)
@@ -3826,17 +4610,36 @@ def game_config():
       "custom_games":[_custom_game_public(x) for x in _custom_games_rows(enabled_only=True)]
     })
 
+@app.get("/api/baccarat/tables")
+@require_account
+def baccarat_tables():
+    table='custom__baccarat-live'
+    row=_custom_game_by_slug('baccarat-live',enabled_only=True)
+    if not row:return jsonify({'detail':'Baccarat chưa được bật'}),404
+    with db() as con:
+        if not _active_account_key(con,request.account['id']):
+            return jsonify({'detail':'Bạn cần key còn hạn để sử dụng Baccarat'}),403
+    try:
+        current,history=get_custom_upstream(table)
+        tabs=_v18_baccarat_tables(current)
+        if len(tabs)<=1 and tabs[0].get('id')=='__default__':
+            tabs=_v18_baccarat_tables(history)
+        return jsonify({'ok':True,'tables':tabs,'count':len(tabs),'api_url':row.get('api_url') or ''})
+    except RuntimeError as e:return jsonify({'detail':str(e)}),502
+    except Exception:return jsonify({'detail':'Nguồn Baccarat đang đồng bộ lại'}),503
+
 @app.get("/api/admin/games")
 @require_admin
 def admin_games_catalog():
     return jsonify({"games":[_custom_game_public(x)|{
       "api_url":x.get("api_url") or "","history_api_url":x.get("history_api_url") or "",
-      "sort_order":int(x.get("sort_order") or 100)
+      "sort_order":int(x.get("sort_order") or 100),"game_url_raw":str(x.get("game_url") or "")
     } for x in _custom_games_rows(False)]})
 
 def _valid_http(v, optional=False):
     v=str(v or "").strip()
     if optional and not v:return ""
+    if v.lower() in ('inherit:lc79','inherit:sunwin','inherit:max789'):return v.lower()
     if not re.match(r"^https?://[^\s]+$",v,re.I):raise ValueError("URL phải bắt đầu bằng http:// hoặc https://")
     return v[:700]
 
@@ -3849,20 +4652,31 @@ def admin_add_game():
     if not slug or len(slug)<2:return jsonify({"detail":"Slug game không hợp lệ"}),400
     if not name:return jsonify({"detail":"Thiếu tên game"}),400
     try:
-        game_url=_valid_http(d.get("game_url"))
+        game_url=_valid_http(d.get("game_url"),True)
         image_url=_valid_http(d.get("image_url"),True)
         api_url=_valid_http(d.get("api_url"),True)
         history_url=_valid_http(d.get("history_api_url"),True)
         algo=max(1,min(3,int(d.get("algo_mode",2))))
+        policy=str(d.get("algo_policy") or "auto").strip().lower()
+        if policy not in ("auto","shared","private"):raise ValueError("algo_policy: auto/shared/private")
+        base_engine=str(d.get("base_engine") or "auto").strip().lower()
+        if base_engine not in ("auto","lc79","sunwin","max789"):raise ValueError("base_engine: auto/lc79/sunwin/max789")
+        category=_game_slug(d.get("category") or "other") or "other"
+        game_type=_game_slug(d.get("game_type") or "tx") or "tx"
+        if game_type not in ("tx","sicbo","xocdia","baccarat","roulette","binary"):raise ValueError("game_type: tx/sicbo/xocdia/baccarat/roulette/binary")
+        icon=str(d.get("icon") or "🎮").strip()[:8] or "🎮"
+        a_label=str(d.get("result_a_label") or ("BANKER" if game_type=="baccarat" else "CHẴN" if game_type=="xocdia" else "ĐỎ" if game_type=="roulette" else "TÀI")).strip()[:24]
+        b_label=str(d.get("result_b_label") or ("PLAYER" if game_type=="baccarat" else "LẺ" if game_type=="xocdia" else "ĐEN" if game_type=="roulette" else "XỈU")).strip()[:24]
+        a_alias=str(d.get("result_a_aliases") or "").strip()[:180];b_alias=str(d.get("result_b_aliases") or "").strip()[:180]
         poll=max(2,min(60,int(d.get("poll_seconds",4))))
         order=max(1,min(999,int(d.get("sort_order",100))))
     except (ValueError,TypeError) as e:return jsonify({"detail":str(e)}),400
     stamp=now_iso()
     try:
         with db() as con:
-            con.execute("""INSERT INTO custom_games(slug,name,description,game_url,image_url,api_url,history_api_url,algo_mode,poll_seconds,enabled,sort_order,created_at,updated_at)
-                           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                        (slug,name,str(d.get("description") or "")[:160],game_url,image_url,api_url,history_url,algo,poll,1 if d.get("enabled",True) else 0,order,stamp,stamp))
+            con.execute("""INSERT INTO custom_games(slug,name,description,game_url,image_url,api_url,history_api_url,algo_mode,algo_policy,base_engine,category,game_type,icon,result_a_label,result_b_label,result_a_aliases,result_b_aliases,poll_seconds,enabled,sort_order,created_at,updated_at)
+                           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                        (slug,name,str(d.get("description") or "")[:160],game_url,image_url,api_url,history_url,algo,policy,base_engine,category,game_type,icon,a_label,b_label,a_alias,b_alias,poll,1 if d.get("enabled",True) else 0,order,stamp,stamp))
     except sqlite3.IntegrityError:return jsonify({"detail":"Slug game đã tồn tại"}),409
     return jsonify({"ok":True,"game":_custom_game_public(_custom_game_by_slug(slug))})
 
@@ -3875,11 +4689,29 @@ def admin_edit_game(slug):
     try:
         if "name" in d:updates["name"]=str(d["name"]).strip()[:60]
         if "description" in d:updates["description"]=str(d["description"]).strip()[:160]
-        if "game_url" in d:updates["game_url"]=_valid_http(d["game_url"])
+        if "game_url" in d:updates["game_url"]=_valid_http(d["game_url"],True)
         if "image_url" in d:updates["image_url"]=_valid_http(d["image_url"],True)
         if "api_url" in d:updates["api_url"]=_valid_http(d["api_url"],True)
         if "history_api_url" in d:updates["history_api_url"]=_valid_http(d["history_api_url"],True)
         if "algo_mode" in d:updates["algo_mode"]=max(1,min(3,int(d["algo_mode"])))
+        if "algo_policy" in d:
+            v=str(d["algo_policy"]).strip().lower()
+            if v not in ("auto","shared","private"):raise ValueError("algo_policy: auto/shared/private")
+            updates["algo_policy"]=v
+        if "base_engine" in d:
+            v=str(d["base_engine"]).strip().lower()
+            if v not in ("auto","lc79","sunwin","max789"):raise ValueError("base_engine: auto/lc79/sunwin/max789")
+            updates["base_engine"]=v
+        if "category" in d:updates["category"]=_game_slug(d["category"] or "other") or "other"
+        if "game_type" in d:
+            v=_game_slug(d["game_type"] or "tx") or "tx"
+            if v not in ("tx","sicbo","xocdia","baccarat","roulette","binary"):raise ValueError("game_type không hợp lệ")
+            updates["game_type"]=v
+        if "icon" in d:updates["icon"]=str(d["icon"] or "🎮").strip()[:8] or "🎮"
+        if "result_a_label" in d:updates["result_a_label"]=str(d["result_a_label"] or "A").strip()[:24]
+        if "result_b_label" in d:updates["result_b_label"]=str(d["result_b_label"] or "B").strip()[:24]
+        if "result_a_aliases" in d:updates["result_a_aliases"]=str(d["result_a_aliases"] or "").strip()[:180]
+        if "result_b_aliases" in d:updates["result_b_aliases"]=str(d["result_b_aliases"] or "").strip()[:180]
         if "poll_seconds" in d:updates["poll_seconds"]=max(2,min(60,int(d["poll_seconds"])))
         if "enabled" in d:updates["enabled"]=1 if bool(d["enabled"]) else 0
         if "sort_order" in d:updates["sort_order"]=max(1,min(999,int(d["sort_order"])))
@@ -3900,6 +4732,7 @@ def admin_delete_game(slug):
     with db() as con:
         con.execute("DELETE FROM custom_games WHERE slug=?",(_game_slug(slug),))
         con.execute("DELETE FROM learned_patterns WHERE table_name=?",(table,))
+        con.execute("DELETE FROM source_observations WHERE table_name=?",(table,))
     _CUSTOM_GAME_CACHE.pop(table,None);_SOURCE_STATE.pop(table,None);_SOURCE_ERRORS.pop(table,None)
     return jsonify({"ok":True,"deleted":_game_slug(slug)})
 
@@ -3970,6 +4803,9 @@ def _report_tables(game):
     if game=='lc79': return ('hu','md5')
     if game=='sunwin': return ('sunwin',)
     if game=='max789': return ('max789_hu','max789_md5')
+    slug=_game_slug(game.replace('custom__',''))
+    row=_custom_game_by_slug(slug,enabled_only=False) if slug else None
+    if row:return (_custom_table(slug),)
     return ()
 
 @app.get('/api/admin/daily-report')
@@ -3977,7 +4813,7 @@ def _report_tables(game):
 def admin_daily_report():
     game=(request.args.get('game') or '').lower().strip()
     tables=_report_tables(game)
-    if not tables:return jsonify({'detail':'game phải là lc79, sunwin hoặc max789'}),400
+    if not tables:return jsonify({'detail':'game không hợp lệ'}),400
     try: hours=max(1,min(168,int(request.args.get('hours','24'))))
     except Exception:hours=24
     end=datetime.now(timezone.utc);start=end-timedelta(hours=hours)
@@ -4018,7 +4854,7 @@ def admin_analysis_report():
         pats=[dict(x) for x in con.execute("""SELECT table_name,context_key,t_weight,x_weight,samples,updated_at
           FROM learned_patterns WHERE updated_at>=? ORDER BY samples DESC,updated_at DESC LIMIT 150""",(start.isoformat(),)).fetchall()]
     sources={}
-    for t in ('hu','md5','sunwin','max789_hu','max789_md5'):
+    for t in _all_prediction_tables():
         st=_SOURCE_STATE.get(t) or {};age=None
         if st: age=max(0,int(time.time()-float(st.get('changed') or time.time())))
         sources[t]={'latest_session':st.get('sid'),'age_seconds':age,'state':'online' if age is not None and age<120 else ('waiting' if st else 'starting')}
@@ -4054,7 +4890,7 @@ def admin_daily_report_mark():
     return jsonify({'ok':True,'last_sent':value})
 
 @app.get("/health")
-def health(): return jsonify({"ok":True,"service":"prediction-core","background":True,"engine":"htungvip-max-stable"})
+def health(): return jsonify({"ok":True,"service":"prediction-core","background":True,"engine":"v20-adaptive-meta-ensemble"})
 
 def client_ip():
     # Railway/Cloudflare/reverse proxy: first forwarded address is the original client.
@@ -4464,6 +5300,70 @@ def clear_device_location():
     log_event("location_revoked",key_id=kid,dev_hash=dh)
     return jsonify({"ok":True})
 
+
+def _v12_result_labels(table):
+    if str(table).startswith('custom__'):
+        row=_custom_game_by_slug(_custom_slug_from_table(table),enabled_only=False) or {}
+        return {'a':str(row.get('result_a_label') or 'A'),'b':str(row.get('result_b_label') or 'B'),
+                'type':str(row.get('game_type') or 'binary'),'category':str(row.get('category') or 'other')}
+    return {'a':'TÀI','b':'XỈU','type':'tx','category':'tai-xiu'}
+
+def _v12_detail_metrics(seq,table):
+    vals=_v61_seq_values(seq,cap=160)
+    labels=_v12_result_labels(table)
+    n=len(vals)
+    if not n:return {'sample':0,'labels':labels}
+    recent=vals[:min(n,80)]
+    ca=recent.count('T');cb=recent.count('X');den=max(1,len(recent))
+    streak=1
+    for x in vals[1:]:
+        if x==vals[0]:streak+=1
+        else:break
+    def cr(w):
+        x=vals[:min(len(vals),w)]
+        return round(sum(1 for a,b in zip(x,x[1:]) if a!=b)/max(1,len(x)-1)*100,1)
+    trans={'TT':[0,0],'TX':[0,0],'XT':[0,0],'XX':[0,0]}
+    pairs=list(zip(reversed(vals[:80]),reversed(vals[:80][1:])))
+    # Simpler newest-window transition counts, direction does not depend on display order.
+    pairs=list(zip(vals[1:80],vals[:79]))
+    c={'TT':0,'TX':0,'XT':0,'XX':0}
+    for prev,nxt in pairs:c[prev+nxt]=c.get(prev+nxt,0)+1
+    ttot=max(1,c['TT']+c['TX']);xtot=max(1,c['XT']+c['XX'])
+    p_t_after_t=round(c['TT']/ttot*100,1);p_x_after_t=round(c['TX']/ttot*100,1)
+    p_t_after_x=round(c['XT']/xtot*100,1);p_x_after_x=round(c['XX']/xtot*100,1)
+    bias=(ca-cb)/den
+    change20=cr(20);change50=cr(50)
+    if change20<=30:phase='BỆT / ÍT ĐẢO'
+    elif change20>=68:phase='ĐẢO NHANH'
+    elif abs(bias)>=.18:phase='LỆCH MỘT PHÍA'
+    else:phase='TRỘN / CÂN BẰNG'
+    with db() as con:
+        rr=con.execute('SELECT correct FROM global_history WHERE table_name=? AND correct IS NOT NULL ORDER BY id DESC LIMIT 60',(table,)).fetchall()
+    vv=[int(r['correct']) for r in rr]
+    acc24=round(sum(vv[:24])/max(1,len(vv[:24]))*100,1) if vv else None
+    acc60=round(sum(vv)/max(1,len(vv))*100,1) if vv else None
+    return {
+      'sample':len(recent),'labels':labels,'a_count':ca,'b_count':cb,
+      'a_pct':round(ca/den*100,1),'b_pct':round(cb/den*100,1),
+      'streak_side':vals[0],'streak_length':streak,'change_rate_20':change20,'change_rate_50':change50,
+      'phase':phase,'transition':{'a_after_a':p_t_after_t,'b_after_a':p_x_after_t,'a_after_b':p_t_after_x,'b_after_b':p_x_after_x},
+      'settled_accuracy_24':acc24,'settled_accuracy_60':acc60,
+      'note':'Thống kê mô tả từ các phiên đã chốt; không bảo đảm phiên kế tiếp.'
+    }
+
+def _v12_regime_guard(table,seq,result,force=False):
+    side,conf,reason=result
+    if side not in ('T','X'):return result
+    vals=_v61_seq_values(seq,cap=100)
+    if len(vals)<24:return side,min(int(conf),76),str(reason or '')+' · V12 WARMUP'
+    x=vals[:24];changes=sum(1 for a,b in zip(x,x[1:]) if a!=b)/max(1,len(x)-1)
+    # A high-entropy mixed regime is where pattern overfitting is most likely.
+    # V12 only lowers/cancels weak calls; it never increases confidence from this guard.
+    if .43<=changes<=.60:
+        conf=min(int(conf),70)
+        if conf<61 and not force:return None,conf,str(reason or '')+' · V12 REGIME GUARD · BỎ QUA'
+    return side,int(conf),str(reason or '')+f' · V12 CR24:{round(changes*100)}%'
+
 @app.post("/api/predict/<table>")
 @require_auth
 def predict(table):
@@ -4472,14 +5372,20 @@ def predict(table):
     try:
         seq,actual_map,next_sid,side,conf,reason,diag=_prediction_payload(table)
         kid=request.auth_payload['kid']
-        side,conf,reason=_store_for_key(kid,table,seq,actual_map,next_sid,side,conf,reason)
+        storage_table=str(diag.get('storage_table') or table)
+        side,conf,reason=_store_for_key(kid,storage_table,seq,actual_map,next_sid,side,conf,reason)
         game_name=('custom' if table.startswith('custom__') else ('sunwin' if table=='sunwin' else ('max789' if table.startswith('max789_') else 'lc79')))
-        return jsonify({'ok':True,'table':table,'game':game_name,
+        analysis=_v12_detail_metrics(seq,storage_table)
+        analysis['labels']=_v12_result_labels(table)
+        if isinstance(diag.get('extra'),dict):analysis.update(diag.get('extra') or {})
+        return jsonify({'ok':True,'table':table,'storage_table':storage_table,'selected_table':diag.get('selected_table') or '','game':game_name,
                         'session_id':next_sid,'side':side,'confidence':conf,'reason':reason,
                         'pattern':diag['pattern'],'regime':diag['regime'],'noise':diag['noise'],
                         'break_score':diag['break_score'],'clarity':diag['clarity'],
                         'source_age_seconds':diag.get('source_age_seconds',0),
-                        'source_delayed':diag.get('source_delayed',False)})
+                        'source_delayed':diag.get('source_delayed',False),
+                        'labels':_v12_result_labels(table),'analysis':analysis,
+                        'engine_v20':diag.get('engine_v20') or {}})
     except RuntimeError as e:
         return jsonify({'detail':str(e),'source_status':'delayed'}),502
     except Exception:
@@ -4514,19 +5420,25 @@ def history():
     table=(request.args.get("table") or "").strip()
     if table and not _is_allowed_history_table(table):
         return jsonify({"detail":"Bàn không hợp lệ"}),400
+    query_table=table
+    if table.startswith('custom__'):
+        row=_custom_game_by_slug(_custom_slug_from_table(table),enabled_only=False) or {}
+        if str(row.get('game_type') or '').lower()=='baccarat':
+            selected=str(request.args.get('baccarat_table') or '').strip()
+            if selected:query_table=_v18_baccarat_storage_table(table,selected)
     ttl_hours=max(1,min(168,setting_int("history_ttl_hours",24,1,168)))
     cutoff=(datetime.now(timezone.utc)-timedelta(hours=ttl_hours)).isoformat()
     with db() as con:
         con.execute("DELETE FROM history WHERE created_at<?",(cutoff,))
         if table:
             rows=con.execute("""SELECT table_name,session_id,side,confidence,reason,actual,correct,created_at
-              FROM history WHERE key_id=? AND table_name=? ORDER BY id DESC LIMIT ?""",(kid,table,limit)).fetchall()
+              FROM history WHERE key_id=? AND table_name=? ORDER BY id DESC LIMIT ?""",(kid,query_table,limit)).fetchall()
         else:
             rows=con.execute("""SELECT table_name,session_id,side,confidence,reason,actual,correct,created_at
               FROM history WHERE key_id=? ORDER BY id DESC LIMIT ?""",(kid,limit)).fetchall()
     out=[]
     for r in rows:
-        out.append({"table":r["table_name"],"sessionId":r["session_id"],"side":r["side"],
+        out.append({"table":(table or r["table_name"]),"sessionId":r["session_id"],"side":r["side"],
           "confidence":r["confidence"],"reason":r["reason"],"actual":r["actual"],
           "correct":None if r["correct"] is None else bool(r["correct"]),
           "time":r["created_at"][11:16] if r["created_at"] else ""})
