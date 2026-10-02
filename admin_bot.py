@@ -13,6 +13,7 @@ ADMIN_SECRET=os.getenv("ADMIN_SECRET","")
 TZ=ZoneInfo("Asia/Ho_Chi_Minh")
 DAILY_REPORT_HOUR=int(os.getenv("DAILY_REPORT_HOUR","0") or 0)
 DAILY_REPORT_MINUTE=int(os.getenv("DAILY_REPORT_MINUTE","5") or 5)
+AUTO_DAILY_REPORT=os.getenv('AUTO_DAILY_REPORT','0').strip().lower() in ('1','true','yes','on')
 
 def allowed(update):
     u=update.effective_user
@@ -225,7 +226,8 @@ async def daily_report_cmd(update:Update,ctx:ContextTypes.DEFAULT_TYPE):
 async def post_init(app):
     app.create_task(live_worker(app),name="taixiutool-live-auto")
     app.create_task(account_live_worker(app),name="taixiutool-account-live")
-    app.create_task(daily_report_worker(app),name="taixiutool-daily-report")
+    if AUTO_DAILY_REPORT:
+        app.create_task(daily_report_worker(app),name="taixiutool-daily-report")
     app.create_task(report48_worker(app),name="taixiutool-48h-report")
 
 async def auto_delete_admin_command(update:Update,ctx:ContextTypes.DEFAULT_TYPE):
@@ -445,13 +447,13 @@ async def custom_games_cmd(update:Update,ctx:ContextTypes.DEFAULT_TYPE):
     if not allowed(update):return
     rows=req("GET","/api/admin/games").get("games",[])
     if not rows:
-        await render_panel(update,"🎮 GAME MỞ RỘNG\n\nChưa có game tùy chỉnh.\n\n/addgame slug | Tên | GAME_URL | IMAGE_URL | API_URL | ALGO")
+        await render_panel(update,"🎮 GAME MỞ RỘNG\n\nChưa có game tùy chỉnh.\n\n/addgame slug | Tên | GAME_URL | IMAGE_URL | API_URL | ALGO | POLICY | BASE | CATEGORY | TYPE | A | B")
         return
     lines=["🎮 GAME MỞ RỘNG · DYNAMIC CATALOG",""]
     for x in rows[:30]:
         lines.append(f"{'🟢' if x.get('enabled') else '⚪'} {x.get('name')} · {x.get('slug')}")
-        lines.append(f"   AI {x.get('algo_mode',2)} · poll {x.get('poll_seconds',4)}s · {'API READY' if x.get('ready') else 'CHƯA API'}")
-    lines += ["","Thêm: /addgame slug | Tên | GAME_URL | IMAGE_URL | API_URL | ALGO",
+        lines.append(f"   {x.get('icon','🎮')} {str(x.get('game_type') or 'tx').upper()} · AI {x.get('algo_mode',2)} · {str(x.get('algo_policy') or 'auto').upper()}/{str(x.get('base_engine') or 'auto').upper()} · poll {x.get('poll_seconds',4)}s · {'API READY' if x.get('ready') else 'CHƯA API'}")
+    lines += ["","Thêm: /addgame slug | Tên | GAME_URL | IMAGE_URL | API_URL | ALGO | POLICY | BASE | CATEGORY | TYPE | A | B",
               "Sửa: /editgame slug field value","Xóa: /delgame slug"]
     await render_panel(update,"\n".join(lines)[:3900])
 
@@ -461,31 +463,35 @@ def _pipe_args(update):
 
 async def addgame_cmd(update:Update,ctx:ContextTypes.DEFAULT_TYPE):
     if not allowed(update):return
-    parts=_pipe_args(update)
-    if len(parts)<3 or not parts[0] or not parts[1] or not parts[2]:
-        await update.message.reply_text("Dùng:\n/addgame slug | Tên Game | GAME_URL | IMAGE_URL | API_URL | ALGO\n\nIMAGE_URL/API_URL có thể để - · ALGO 1/2/3")
+    raw=update.message.text.partition(' ')[2].strip()
+    parts=[x.strip() for x in raw.split('|')] if raw else []
+    if len(parts)<2:
+        await update.message.reply_text("Dùng:\n/addgame slug | Tên | GAME_URL | IMAGE_URL | API_URL | ALGO | POLICY | BASE | CATEGORY | TYPE | A | B\n\nTYPE: tx/sicbo/xocdia/baccarat/roulette/binary\nCATEGORY ví dụ: tai-xiu / casino / xoc-dia / sicbo")
         return
-    slug,name,game_url=parts[:3]
-    image_url=parts[3] if len(parts)>3 and parts[3] not in ('','-') else ''
-    api_url=parts[4] if len(parts)>4 and parts[4] not in ('','-') else ''
-    try:algo=max(1,min(3,int(parts[5]))) if len(parts)>5 and parts[5] else 2
-    except Exception:algo=2
-    payload={"slug":slug,"name":name,"game_url":clean_http_url(game_url) or game_url,
-             "image_url":clean_http_url(image_url) if image_url else '',"api_url":clean_http_url(api_url) if api_url else '',"algo_mode":algo}
-    d=req("POST","/api/admin/games",json=payload);g=d.get('game',{})
-    await update.message.reply_text(f"✅ ĐÃ THÊM GAME\n{g.get('name')} · {g.get('slug')}\nAI mode {g.get('algo_mode')} · {'API READY' if g.get('ready') else 'chưa có API'}\n\nWeb sẽ tự hiện card game sau khi reload.")
+    def p(i,default=''):
+        return parts[i] if len(parts)>i and parts[i] not in ('','-') else default
+    slug,name,game_url=p(0),p(1),p(2,'')
+    payload={
+      'slug':slug,'name':name,'game_url':game_url,'image_url':p(3),'api_url':p(4),
+      'algo_mode':int(p(5,'2') or 2),'algo_policy':p(6,'auto').lower(),'base_engine':p(7,'auto').lower(),
+      'category':p(8,'other').lower(),'game_type':p(9,'tx').lower(),
+      'result_a_label':p(10,''),'result_b_label':p(11,''),'enabled':True
+    }
+    d=req('POST','/api/admin/games',json=payload);g=d.get('game',{})
+    await update.message.reply_text(f"✅ Đã thêm {g.get('icon','🎮')} {g.get('name',name)}\nNhóm: {g.get('category','other')} · Loại: {g.get('game_type','tx')}\nKết quả: {g.get('result_a_label','A')} / {g.get('result_b_label','B')}\nAI: {g.get('algo_policy','auto').upper()} · {g.get('base_engine','auto').upper()} · M{g.get('algo_mode',2)}")
 
 async def editgame_cmd(update:Update,ctx:ContextTypes.DEFAULT_TYPE):
     if not allowed(update):return
     if len(ctx.args)<3:
-        await update.message.reply_text("Dùng: /editgame SLUG FIELD VALUE\nFIELD: name game image api history desc algo poll on order")
+        await update.message.reply_text("Dùng: /editgame SLUG FIELD VALUE\nFIELD: name game image api history desc algo policy base category type icon a b a_alias b_alias poll on order")
         return
     slug=ctx.args[0].strip().lower();field=ctx.args[1].strip().lower();value=" ".join(ctx.args[2:]).strip()
-    key={"name":"name","game":"game_url","image":"image_url","api":"api_url","history":"history_api_url","desc":"description","algo":"algo_mode","poll":"poll_seconds","on":"enabled","order":"sort_order"}.get(field)
+    key={"name":"name","game":"game_url","image":"image_url","api":"api_url","history":"history_api_url","desc":"description","algo":"algo_mode","policy":"algo_policy","base":"base_engine","category":"category","type":"game_type","icon":"icon","a":"result_a_label","b":"result_b_label","a_alias":"result_a_aliases","b_alias":"result_b_aliases","poll":"poll_seconds","on":"enabled","order":"sort_order"}.get(field)
     if not key:
-        await update.message.reply_text("FIELD: name game image api history desc algo poll on order");return
+        await update.message.reply_text("FIELD: name game image api history desc algo policy base category type icon a b a_alias b_alias poll on order");return
     if key in ('game_url','image_url','api_url','history_api_url'):
-        if value in ('-','off','none') and key!='game_url':value=''
+        if value in ('-','off','none'):value=''
+        elif key=='game_url' and value.lower() in ('inherit:lc79','inherit:sunwin','inherit:max789'):value=value.lower()
         elif not clean_http_url(value):await update.message.reply_text("URL không hợp lệ.");return
         else:value=clean_http_url(value)
     elif key in ('algo_mode','poll_seconds','sort_order'):
@@ -500,6 +506,20 @@ async def delgame_cmd(update:Update,ctx:ContextTypes.DEFAULT_TYPE):
     if not ctx.args:await update.message.reply_text("Dùng: /delgame SLUG");return
     slug=ctx.args[0].strip().lower();req("DELETE",f"/api/admin/games/{slug}")
     await update.message.reply_text(f"✅ Đã xóa game {slug}. Dữ liệu tự học riêng của game cũng đã dọn.")
+
+async def v14games_cmd(update:Update,ctx:ContextTypes.DEFAULT_TYPE):
+    if not allowed(update):return
+    rows=req("GET","/api/admin/games").get("games",[])
+    wanted={"sunwin-sicbo","lc79-xocdia","68gb-hu","68gb-md5","baccarat-live"}
+    rows=[x for x in rows if x.get("slug") in wanted]
+    if not rows:
+        await update.message.reply_text("⚠️ Chưa thấy pack V14. Restart backend một lần để seed game mặc định.");return
+    out=["🚀 V18 MULTI-GAME PACK · API + SELF LEARNING",""]
+    for x in rows:
+        out.append(f"{'🟢' if x.get('enabled') else '⚪'} {x.get('icon','🎮')} {x.get('name')} · {x.get('game_type','tx').upper()}")
+        out.append(f"   {x.get('algo_policy','auto').upper()}/{x.get('base_engine','auto').upper()} · AI{x.get('algo_mode',2)} · poll {x.get('poll_seconds',4)}s")
+    out += ["","Đổi API nhanh: /editgame <slug> api <URL>","Đổi link game: /editgame <slug> game <URL hoặc inherit:sunwin|lc79>"]
+    await render_panel(update,"\n".join(out)[:3900])
 
 async def setgame(update:Update,ctx:ContextTypes.DEFAULT_TYPE):
     if not allowed(update):return
@@ -827,6 +847,7 @@ async def adminhelp_cmd(update:Update,ctx:ContextTypes.DEFAULT_TYPE):
       "➕ /addgame · thêm game + ảnh + link + API + AI\n"
       "🟢 /gameon · bật game | ⏸ /gameoff · tắt game\n"
       "✏️ /editgame · sửa game / AI / poll\n"
+      "🚀 /v14games · trạng thái pack Sicbo/Xóc Đĩa/68GB/Baccarat\n"
       "🎨 /ui · giao diện\n"
       "📊 /report48 · báo cáo 48H\n"
       "⚙️ /allsettings · toàn bộ cấu hình"
@@ -1009,7 +1030,13 @@ def analysis_report_text_payload(d):
 
 async def send_48h_reports(app,manual=False):
     stamp=datetime.now(TZ).strftime('%Y-%m-%d_%H%M')
-    for game in ('lc79','sunwin','max789'):
+    games=['lc79','sunwin','max789']
+    try:
+        custom=await asyncio.to_thread(req,'GET','/api/admin/games')
+        games += [str(x.get('slug')) for x in (custom.get('games') or []) if x.get('enabled') and x.get('api_url')]
+    except Exception:
+        pass
+    for game in games:
         d=await asyncio.to_thread(req,'GET',f'/api/admin/daily-report?game={game}&hours=48')
         raw=report_text_payload(d).replace('24H','48H').encode('utf-8')
         bio=io.BytesIO(raw);bio.name=f'{game}_48h_{stamp}.txt'
@@ -1026,7 +1053,7 @@ async def report48_cmd(update:Update,ctx:ContextTypes.DEFAULT_TYPE):
     m=await update.message.reply_text('⏳ Đang tạo báo cáo 48H...')
     try:
         await send_48h_reports(ctx.application,manual=True)
-        await m.edit_text('✅ Đã gửi 4 file báo cáo 48H.')
+        await m.edit_text('✅ Đã gửi bộ báo cáo 48H cho toàn bộ game đang bật.')
     except Exception as e:
         await m.edit_text('⚠️ '+str(e)[:350])
 
@@ -1042,10 +1069,14 @@ async def report48_worker(app):
                     if dt.tzinfo is None:dt=dt.replace(tzinfo=TZ)
                     due=(datetime.now(TZ)-dt.astimezone(TZ)).total_seconds()>=172800
                 except Exception:due=True
-            if due:await send_48h_reports(app,manual=False)
+            if not last:
+                # First boot starts the silent 48H learning window instead of sending an empty report immediately.
+                await asyncio.to_thread(req,'POST','/api/admin/analysis-report-state',json={'last_sent_at':datetime.now(TZ).isoformat()})
+            elif due:
+                await send_48h_reports(app,manual=False)
         except Exception:
             pass
-        await asyncio.sleep(300)
+        await asyncio.sleep(60)
 
 
 def main():
@@ -1071,6 +1102,7 @@ def main():
     app.add_handler(CommandHandler("addgame",addgame_cmd))
     app.add_handler(CommandHandler("editgame",editgame_cmd))
     app.add_handler(CommandHandler("delgame",delgame_cmd))
+    app.add_handler(CommandHandler("v14games",v14games_cmd))
     app.add_handler(CommandHandler("gameon",gameon_cmd))
     app.add_handler(CommandHandler("gameoff",gameoff_cmd))
     app.add_handler(CommandHandler("setgame",setgame))
