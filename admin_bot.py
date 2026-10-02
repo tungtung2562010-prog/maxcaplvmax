@@ -101,7 +101,7 @@ async def dashboard_text():
           "Chọn nút bên dưới để điều khiển. /adminhelp để xem lệnh nhanh."
         )
     except Exception as e:
-        return "🛡 TAIXIUTOOL ADMIN\n\n⚠️ Backend: "+str(e)
+        return "🛡 TAIXIUTOOL · ADMIN CENTER\n\n⚠️ Backend: "+str(e)
 
 def ua_label(ua,os_name=""):
     u=ua or ""
@@ -1077,6 +1077,36 @@ async def report48_worker(app):
         except Exception:
             pass
         await asyncio.sleep(60)
+
+
+
+async def _set_game_enabled_cmd(update:Update, ctx:ContextTypes.DEFAULT_TYPE, enabled:bool):
+    """Bật/tắt một game mở rộng bằng slug qua API admin hiện có."""
+    if not allowed(update):
+        return
+    if not ctx.args:
+        await update.message.reply_text(
+            f"Dùng: /{'gameon' if enabled else 'gameoff'} SLUG\n"
+            "Ví dụ: /gameon baccarat-live"
+        )
+        return
+    slug=ctx.args[0].strip().lower()
+    try:
+        d=await asyncio.to_thread(req,"PATCH",f"/api/admin/games/{slug}",json={"enabled":enabled})
+        g=d.get("game") or {}
+        await update.message.reply_text(
+            f"{'🟢 Đã bật' if enabled else '⏸ Đã tắt'} "
+            f"{g.get('icon','🎮')} {g.get('name') or slug}\n"
+            f"Slug: {g.get('slug') or slug}"
+        )
+    except Exception as e:
+        await update.message.reply_text(f"❌ Không thể {'bật' if enabled else 'tắt'} game {slug}: {e}")
+
+async def gameon_cmd(update:Update, ctx:ContextTypes.DEFAULT_TYPE):
+    await _set_game_enabled_cmd(update,ctx,True)
+
+async def gameoff_cmd(update:Update, ctx:ContextTypes.DEFAULT_TYPE):
+    await _set_game_enabled_cmd(update,ctx,False)
 
 
 def main():
